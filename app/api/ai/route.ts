@@ -1,15 +1,42 @@
-import { NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 
-import { generateAIResponse } from "@/lib/ai/services/ai-service";
+import {
+  generateAIResponse,
+  streamAIResponse,
+} from "@/lib/ai/services/ai-service";
 
-export async function POST(request: Request) {
+export async function POST(
+  request: NextRequest
+) {
 
   const body = await request.json();
 
-  const response = await generateAIResponse({
-    prompt: body.prompt,
-  });
+  const stream =
+    request.nextUrl.searchParams.get("stream") === "true";
 
-  return NextResponse.json(response);
+  if (stream) {
+
+    const readable =
+      await streamAIResponse({
+        prompt: body.prompt,
+        model: body.model,
+      });
+
+    return new Response(readable, {
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-cache",
+      },
+    });
+
+  }
+
+  const response =
+    await generateAIResponse({
+      prompt: body.prompt,
+      model: body.model,
+    });
+
+  return Response.json(response);
 
 }

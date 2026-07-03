@@ -9,9 +9,7 @@ import type { ChatMessage } from "../types/chat-message";
 export function useChat() {
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-
   const [loading, setLoading] = useState(false);
-
   const [error, setError] = useState<string | null>(null);
 
   async function send(prompt: string) {
@@ -25,29 +23,77 @@ export function useChat() {
       createdAt: new Date(),
     };
 
-    setMessages(previous => [...previous, userMessage]);
+    const assistantId = crypto.randomUUID();
+
+    setMessages(previous => [
+      ...previous,
+      userMessage,
+      {
+        id: assistantId,
+        role: "assistant",
+        content: "",
+        createdAt: new Date(),
+      },
+    ]);
 
     setLoading(true);
-
     setError(null);
 
     try {
 
-      const response = await chatService.send({
+      const stream = await chatService.stream({
         prompt,
       });
 
-      const assistantMessage: ChatMessage = {
-        id: crypto.randomUUID(),
-        role: "assistant",
-        content: response.content,
-        createdAt: new Date(),
-      };
+      const reader = stream.getReader();
+      const decoder = new TextDecoder();
 
-      setMessages(previous => [
-        ...previous,
-        assistantMessage,
-      ]);
+      let buffer = "";
+
+      while (true) {
+
+        const { done, value } =
+          await reader.read();
+
+        if (done) break;
+
+        buffer += decoder.decode(value, {
+          stream: true,
+        });
+
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+
+          if (!line.trim()) continue;
+
+          try {
+
+            const json = JSON.parse(line);
+
+            if (!json.response) continue;
+
+            setMessages(previous =>
+              previous.map(message =>
+                message.id === assistantId
+                  ? {
+                      ...message,
+                      content:
+                        message.content +
+                        json.response,
+                    }
+                  : message
+              )
+            );
+
+          } catch {
+            // Ignore partial JSON chunks
+          }
+
+        }
+
+      }
 
     } catch (err) {
 
@@ -66,15 +112,10 @@ export function useChat() {
   }
 
   return {
-
     messages,
-
     loading,
-
     error,
-
     send,
-
   };
 
 }

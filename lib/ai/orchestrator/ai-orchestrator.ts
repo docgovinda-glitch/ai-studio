@@ -17,9 +17,7 @@ export class AIOrchestrator {
     this.runtime.initialize();
   }
 
-  async execute(
-    request: ProviderRequest
-  ): Promise<ProviderResponse> {
+  private resolveProvider() {
 
     const context = this.runtime
       .engine()
@@ -27,12 +25,30 @@ export class AIOrchestrator {
         requiredCapabilities: ["chat"],
       });
 
-    const provider = this.selector.select(
+    return this.selector.select(
       context.strategy,
       this.registry.list()
     );
 
+  }
+
+  async execute(
+    request: ProviderRequest
+  ): Promise<ProviderResponse> {
+
+    const provider = this.resolveProvider();
+
     return provider.generate(request);
+
+  }
+
+  async stream(
+    request: ProviderRequest
+  ): Promise<ReadableStream<Uint8Array>> {
+
+    const provider = this.resolveProvider();
+
+    return provider.stream(request);
 
   }
 

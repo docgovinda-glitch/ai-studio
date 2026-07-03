@@ -39,15 +39,19 @@ export class OllamaProvider implements AIProvider {
       {
         method: "POST",
         headers: {
-          "Content-Type":"application/json"
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           model: request.model ?? this.config.defaultModel,
           prompt: request.prompt,
-          stream: false
-        })
+          stream: false,
+        }),
       }
     );
+
+    if (!response.ok) {
+      throw new Error("Ollama request failed.");
+    }
 
     const json = await response.json();
 
@@ -61,10 +65,35 @@ export class OllamaProvider implements AIProvider {
         outputTokens: json.eval_count ?? 0,
         totalTokens:
           (json.prompt_eval_count ?? 0) +
-          (json.eval_count ?? 0)
-      }
+          (json.eval_count ?? 0),
+      },
     };
+  }
 
+  async stream(
+    request: ProviderRequest
+  ): Promise<ReadableStream<Uint8Array>> {
+
+    const response = await fetch(
+      `${this.config.baseUrl}/api/generate`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: request.model ?? this.config.defaultModel,
+          prompt: request.prompt,
+          stream: true,
+        }),
+      }
+    );
+
+    if (!response.ok || !response.body) {
+      throw new Error("Unable to create Ollama stream.");
+    }
+
+    return response.body;
   }
 
   async health(): Promise<boolean> {
