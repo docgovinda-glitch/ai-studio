@@ -1,22 +1,10 @@
-import type { AIRequest } from "../types/ai-request";
-import type { AIResponse } from "../types/ai-response";
-import { ProviderRegistry } from "../registry/provider-registry";
+import { AIOrchestrator } from "../orchestrator/ai-orchestrator";
+import type { ProviderRequest } from "../providers/base/provider-request";
 
-export class AIService {
-  constructor(
-    private readonly registry: ProviderRegistry
-  ) {}
+const orchestrator = new AIOrchestrator();
 
-  async execute(
-    providerId: string,
-    request: AIRequest
-  ): Promise<AIResponse> {
-    const provider = this.registry.get(providerId);
-
-    if (!provider) {
-      throw new Error(`Provider "${providerId}" not found.`);
-    }
-
-    return provider.execute(request);
-  }
+export async function generateAIResponse(
+  request: ProviderRequest
+) {
+  return orchestrator.execute(request);
 }
