@@ -86,13 +86,14 @@ export function createOllamaProvider(): AiProvider {
         if (response.status === 404 && isOllama) {
           throw new AiProviderRequestError(
             `Local Ollama model "${model}" was not found. Pull it with "ollama pull ${model}" first.`,
-            404
+            400
           );
         }
 
+        const errorStatus = response.status === 404 ? 400 : (response.status >= 500 ? 502 : response.status);
         throw new AiProviderRequestError(
           details || `Local engine "${engine}" returned HTTP ${response.status}.`,
-          response.status >= 500 ? 502 : response.status
+          errorStatus
         );
       }
 

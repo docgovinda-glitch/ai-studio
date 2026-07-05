@@ -8,12 +8,14 @@ import {
   PenLine,
   Settings,
   Video,
+  ShieldCheck,
 } from "lucide-react";
 
 export type NavigationItem = {
   title: string;
   href: string;
   icon: LucideIcon;
+  isAdminOnly?: boolean;
 };
 
 export const navigationItems: NavigationItem[] = [
@@ -56,5 +58,11 @@ export const navigationItems: NavigationItem[] = [
     title: "Settings",
     href: "/settings",
     icon: Settings,
+  },
+  {
+    title: "Admin Console",
+    href: "/admin",
+    icon: ShieldCheck,
+    isAdminOnly: true,
   },
 ];

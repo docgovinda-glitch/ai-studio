@@ -64,15 +64,14 @@ export function ChatWorkspace() {
       const p = localStorage.getItem("ai_provider") ?? "ollama";
       setActiveProvider(p);
 
-      let m = localStorage.getItem("ai_model") ?? "";
-      if (!m) {
-        if (p === "openrouter") m = localStorage.getItem("openrouter_model") || "auto";
-        else if (p === "gemini") m = localStorage.getItem("gemini_model") || "gemini-1.5-flash";
-        else if (p === "groq") m = localStorage.getItem("groq_model") || "llama-3.3-70b-versatile";
-        else if (p === "openai") m = localStorage.getItem("openai_model") || "gpt-4o-mini";
-        else if (p === "anthropic") m = localStorage.getItem("anthropic_model") || "claude-3-5-sonnet-latest";
-        else m = localStorage.getItem("ollama_model") || "llama3.1";
-      }
+      let m = "";
+      if (p === "openrouter") m = localStorage.getItem("openrouter_model") || "auto";
+      else if (p === "gemini") m = localStorage.getItem("gemini_model") || "gemini-1.5-flash";
+      else if (p === "groq") m = localStorage.getItem("groq_model") || "llama-3.3-70b-versatile";
+      else if (p === "openai") m = localStorage.getItem("openai_model") || "gpt-4o-mini";
+      else if (p === "anthropic") m = localStorage.getItem("anthropic_model") || "claude-3-5-sonnet-latest";
+      else m = localStorage.getItem("ollama_model") || "llama3.1";
+
       if (
         m === "lynn/soliloquy-l2-13b:free" ||
         m === "intel/neural-chat-7b-v3-1:free" ||
@@ -83,6 +82,8 @@ export function ChatWorkspace() {
       ) {
         m = "auto";
       }
+      
+      localStorage.setItem("ai_model", m);
       setActiveModel(m);
       setProviderModel(m || `${PROVIDER_NAMES[p] || p} default`);
     }
@@ -209,11 +210,16 @@ export function ChatWorkspace() {
         }
       }
 
-      const payload = (await response.json()) as ChatResponse;
+      let payload: ChatResponse | null = null;
+      if (response.headers.get("content-type")?.includes("application/json")) {
+        try {
+          payload = (await response.json()) as ChatResponse;
+        } catch {}
+      }
 
-      if (!response.ok || payload.error) {
+      if (!response.ok || !payload || payload.error) {
         throw new Error(
-          payload.error?.message ?? "AI Studio could not complete the request."
+          payload?.error?.message ?? `AI Studio could not complete the request (HTTP ${response.status}).`
         );
       }
 

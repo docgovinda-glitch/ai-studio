@@ -58,17 +58,17 @@ export default function WritingStudioPage() {
       let targetModel = "";
       if (typeof window !== "undefined") {
         if (activeProvider === "openrouter") {
-          targetModel = localStorage.getItem("openrouter_model") || "";
+          targetModel = localStorage.getItem("openrouter_model") || "auto";
         } else if (activeProvider === "gemini") {
-          targetModel = localStorage.getItem("gemini_model") || "";
+          targetModel = localStorage.getItem("gemini_model") || "gemini-2.5-flash";
         } else if (activeProvider === "groq") {
-          targetModel = localStorage.getItem("groq_model") || "";
+          targetModel = localStorage.getItem("groq_model") || "llama-3.3-70b-versatile";
         } else if (activeProvider === "openai") {
-          targetModel = localStorage.getItem("openai_model") || "";
+          targetModel = localStorage.getItem("openai_model") || "gpt-4o-mini";
         } else if (activeProvider === "anthropic") {
-          targetModel = localStorage.getItem("anthropic_model") || "";
+          targetModel = localStorage.getItem("anthropic_model") || "claude-3-5-sonnet-latest";
         } else if (activeProvider === "ollama") {
-          targetModel = localStorage.getItem("ollama_model") || "";
+          targetModel = localStorage.getItem("ollama_model") || "llama3.1";
         }
       }
 

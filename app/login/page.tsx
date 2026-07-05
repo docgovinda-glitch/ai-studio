@@ -109,7 +109,7 @@ export default function LoginPage() {
         email: `guest@${platform}.com`,
         phone: "+1 (555) 000-0000",
         photo: "",
-        role: platform === "github" ? "admin" : "user",
+        role: "user",
         preferredModel: "gpt-4o-mini",
         countryCode: "+1",
       };
@@ -332,7 +332,7 @@ export default function LoginPage() {
           </div>
 
           <div className="pt-2 text-center text-[10px] text-muted-foreground leading-normal">
-            💡 <strong>Quick Testing:</strong> Sign in with email <code>admin@everest.ai</code> and password <code>admin</code> to unlock the administrator controls.
+            Use your registered credentials to sign in.
           </div>
         </form>
       ) : (

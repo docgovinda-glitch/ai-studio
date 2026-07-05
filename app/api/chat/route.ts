@@ -45,6 +45,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     if (error instanceof AiKernelError) {
+      const status = error.status === 404 ? 400 : error.status;
       return Response.json(
         {
           error: {
@@ -52,7 +53,7 @@ export async function POST(request: Request) {
             message: error.message,
           },
         },
-        { status: error.status }
+        { status }
       );
     }
 

@@ -12,7 +12,7 @@ export function TopNav() {
   const router = useRouter();
   const [clickCount, setClickCount] = useState(0);
   const [showDropdown, setShowDropdown] = useState(false);
-  const [user, setUser] = useState<{ fullName: string; email: string; photo: string; role: string } | null>(null);
+  const [user, setUser] = useState<{ firstName?: string; lastName?: string; fullName?: string; email: string; photo: string; role: string } | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -26,6 +26,7 @@ export function TopNav() {
   }, []);
 
   const handleLogoClick = () => {
+    if (user?.role !== "admin") return;
     setClickCount((prev) => {
       if (prev + 1 >= 5) {
         router.push("/admin");
@@ -42,8 +43,10 @@ export function TopNav() {
     router.replace("/login");
   };
 
-  const getInitials = (name: string) => {
-    if (!name) return "";
+  const getInitials = (u: typeof user) => {
+    if (!u) return "AI";
+    const name = u.fullName || `${u.firstName ?? ""} ${u.lastName ?? ""}`.trim();
+    if (!name) return "AI";
     return name
       .split(" ")
       .map((n) => n[0])
@@ -51,6 +54,11 @@ export function TopNav() {
       .toUpperCase()
       .slice(0, 2);
   };
+
+  const displayName = user
+    ? user.fullName || `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || "Guest Account"
+    : "Guest Account";
+  const hasPhoto = user?.photo && user.photo !== "/api/placeholder/120/120" && user.photo !== "";
 
   return (
     <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur">
@@ -94,10 +102,10 @@ export function TopNav() {
               onClick={() => setShowDropdown(!showDropdown)}
               className="flex size-8 items-center justify-center rounded-lg bg-secondary text-xs font-semibold text-secondary-foreground border border-border/50 hover:bg-secondary/80 overflow-hidden cursor-pointer"
             >
-              {user?.photo ? (
-                <img src={user.photo} alt="Avatar" className="size-full object-cover" />
+              {hasPhoto ? (
+                <img src={user!.photo} alt="Avatar" className="size-full object-cover" />
               ) : (
-                <span>{user ? getInitials(user.fullName) : "AI"}</span>
+                <span>{getInitials(user)}</span>
               )}
             </button>
 
@@ -109,7 +117,7 @@ export function TopNav() {
                 {/* Dropdown Menu */}
                 <div className="absolute right-0 mt-2 w-56 rounded-lg border border-border bg-card p-1 shadow-lg z-20 animate-in fade-in slide-in-from-top-1 duration-150">
                   <div className="px-3 py-2 border-b border-border/40 text-left">
-                    <p className="text-xs font-semibold text-foreground truncate">{user?.fullName || "Guest Account"}</p>
+                    <p className="text-xs font-semibold text-foreground truncate">{displayName}</p>
                     <p className="text-[10px] text-muted-foreground truncate mt-0.5">{user?.email || "guest@everest.ai"}</p>
                   </div>
                   

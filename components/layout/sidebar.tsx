@@ -11,6 +11,17 @@ export function Sidebar() {
   const [clickCount, setClickCount] = useState(0);
 
   const handleLogoClick = () => {
+    if (typeof window !== "undefined") {
+      const savedUser = localStorage.getItem("current_user");
+      let role = "";
+      if (savedUser) {
+        try {
+          role = JSON.parse(savedUser).role;
+        } catch {}
+      }
+      if (role !== "admin") return;
+    }
+
     setClickCount((prev) => {
       if (prev + 1 >= 5) {
         router.push("/admin");

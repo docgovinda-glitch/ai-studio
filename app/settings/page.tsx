@@ -148,7 +148,7 @@ export default function SettingsPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [photo, setPhoto] = useState("/api/placeholder/120/120");
+  const [photo, setPhoto] = useState("");
   const [faceVerified, setFaceVerified] = useState(false);
   const [bio, setBio] = useState("");
   const [preferredModel, setPreferredModel] = useState("gpt-4o-mini");
@@ -363,7 +363,7 @@ export default function SettingsPage() {
           setFullName(user.fullName || "");
           setEmail(user.email || "");
           setPhone(user.phone || "");
-          setPhoto(user.photo || "/api/placeholder/120/120");
+          setPhoto(user.photo || "");
           setFaceVerified(user.faceVerified || false);
           setBio(user.bio || "");
           setPreferredModel(user.preferredModel || "gpt-4o-mini");
@@ -404,6 +404,16 @@ export default function SettingsPage() {
       localStorage.setItem("local_engine", localEngine);
       localStorage.setItem("ml_routing_enabled", mlRouting ? "true" : "false");
       localStorage.setItem("shared_telemetry_enabled", sharedTelemetry ? "true" : "false");
+
+      let activeModel = "";
+      if (provider === "openrouter") activeModel = openrouterModel;
+      else if (provider === "gemini") activeModel = geminiModel;
+      else if (provider === "groq") activeModel = groqModel;
+      else if (provider === "openai") activeModel = openaiModel;
+      else if (provider === "anthropic") activeModel = anthropicModel;
+      else activeModel = activeOllamaModel;
+
+      localStorage.setItem("ai_model", activeModel);
 
       setIsSaving(false);
       setSaveSuccess(true);

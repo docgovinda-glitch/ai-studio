@@ -1,10 +1,25 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Mail, Key, Phone, User, AlertCircle, Check, Search } from 'lucide-react';
-import SocialButton from '@/components/SocialButton';
 import { useRouter } from 'next/navigation';
 import { AuthCard } from '@/components/AuthCard';
+
+interface SocialButtonProps {
+  platform: 'google' | 'facebook' | 'github';
+  onClick: () => void;
+}
+
+function SocialButton({ platform, onClick }: SocialButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex h-10 items-center justify-center rounded-lg border border-border bg-background/50 hover:bg-accent/40 text-xs font-semibold text-foreground transition capitalize cursor-pointer"
+    >
+      {platform}
+    </button>
+  );
+}
 
 // Types for user profile (same as in login page)
 type UserProfile = {
@@ -63,7 +78,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
         email: `guest@${platform}.com`,
         phone: '+1 (555) 000‑0000',
         photo: profilePhoto,
-        role: platform === 'github' ? 'admin' : 'user',
+        role: 'user',
         preferredModel,
       };
       // Store mock user if not present

@@ -14,20 +14,30 @@ import {
   Video,
   FolderKanban,
   Settings,
-  Activity,
   Check,
+  AlertTriangle,
+  ShieldCheck,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
 
 const PROVIDERS = [
-  { id: "ollama", label: "Ollama (Local)", icon: Cpu, desc: "Run models locally on your machine" },
-  { id: "openrouter", label: "OpenRouter", icon: Globe, desc: "Access 100+ models via OpenRouter" },
-  { id: "gemini", label: "Google Gemini", icon: Sparkles, desc: "Google's latest AI models" },
-  { id: "groq", label: "Groq", icon: Zap, desc: "Ultra-fast inference engine" },
-  { id: "openai", label: "OpenAI", icon: Bot, desc: "GPT-4o and GPT-3.5 models" },
-  { id: "anthropic", label: "Anthropic", icon: Bot, desc: "Claude family of models" },
+  { id: "ollama", label: "Ollama (Local)", icon: Cpu, desc: "Run models locally on your machine", keyless: true },
+  { id: "openrouter", label: "OpenRouter", icon: Globe, desc: "Access 100+ models via OpenRouter", keyless: false },
+  { id: "gemini", label: "Google Gemini", icon: Sparkles, desc: "Google's latest AI models", keyless: false },
+  { id: "groq", label: "Groq", icon: Zap, desc: "Ultra-fast inference engine", keyless: false },
+  { id: "openai", label: "OpenAI", icon: Bot, desc: "GPT-4o and GPT-3.5 models", keyless: false },
+  { id: "anthropic", label: "Anthropic", icon: Bot, desc: "Claude family of models", keyless: false },
 ] as const;
+
+// localStorage key for each provider's API key
+const API_KEY_MAP: Record<string, string> = {
+  openrouter: "openrouter_key",
+  gemini: "gemini_key",
+  groq: "groq_key",
+  openai: "openai_key",
+  anthropic: "anthropic_key",
+};
 
 const MODEL_MAP: Record<string, string[]> = {
   ollama: ["llama3.1", "llama3.2", "llama3.3", "gemma2:9b", "qwen2.5:7b", "mistral", "mixtral", "phi3", "deepseek-coder"],
@@ -51,6 +61,7 @@ interface UserData {
   firstName?: string;
   lastName?: string;
   photo?: string;
+  role?: string;
 }
 
 export default function AIControlPage() {
@@ -59,6 +70,20 @@ export default function AIControlPage() {
   const [provider, setProvider] = useState("ollama");
   const [model, setModel] = useState("llama3.1");
   const [saved, setSaved] = useState(false);
+  const [hasApiKey, setHasApiKey] = useState(true);
+  const [hasKeys, setHasKeys] = useState<Record<string, boolean>>({});
+  const [localModels, setLocalModels] = useState<string[]>([]);
+
+  function checkApiKey(providerId: string) {
+    if (typeof window === "undefined") return;
+    const meta = PROVIDERS.find(p => p.id === providerId);
+    if (meta?.keyless) { setHasApiKey(true); return; }
+    const lsKey = API_KEY_MAP[providerId];
+    const val = lsKey ? localStorage.getItem(lsKey) : null;
+    const hasKey = !!val && val.trim().length > 0;
+    setHasApiKey(hasKey);
+    setHasKeys(prev => ({ ...prev, [providerId]: hasKey }));
+  }
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -67,18 +92,55 @@ export default function AIControlPage() {
         try { setUser(JSON.parse(raw)); } catch {}
       }
 
-      const savedProvider = localStorage.getItem("ai_provider") || "ollama";
-      let savedModel = localStorage.getItem("ai_model") || "";
-      
-      if (!savedModel) {
-        if (savedProvider === "openrouter") savedModel = localStorage.getItem("openrouter_model") || "auto";
-        else if (savedProvider === "gemini") savedModel = localStorage.getItem("gemini_model") || "gemini-1.5-flash";
-        else if (savedProvider === "groq") savedModel = localStorage.getItem("groq_model") || "llama-3.3-70b-versatile";
-        else if (savedProvider === "openai") savedModel = localStorage.getItem("openai_model") || "gpt-4o-mini";
-        else if (savedProvider === "anthropic") savedModel = localStorage.getItem("anthropic_model") || "claude-3-5-sonnet-latest";
-        else savedModel = localStorage.getItem("ollama_model") || "llama3.1";
-      }
+      // Populate hasKeys status on mount
+      const keyStatuses: Record<string, boolean> = {};
+      PROVIDERS.forEach(p => {
+        if (p.keyless) {
+          keyStatuses[p.id] = true;
+        } else {
+          const lsKey = API_KEY_MAP[p.id];
+          const val = lsKey ? localStorage.getItem(lsKey) : null;
+          keyStatuses[p.id] = !!val && val.trim().length > 0;
+        }
+      });
+      setHasKeys(keyStatuses);
 
+      const url = localStorage.getItem("ollama_url") || "http://127.0.0.1:11434";
+      fetch(`${url}/api/tags`)
+        .then(res => res.json())
+        .then(data => {
+          if (data && Array.isArray(data.models)) {
+            const names = data.models.map((m: any) => m.name);
+            setLocalModels(names);
+
+            const savedProvider = localStorage.getItem("ai_provider") || "ollama";
+            const savedOllamaModel = localStorage.getItem("ollama_model") || "llama3.1";
+            if (savedProvider === "ollama" && names.length > 0) {
+              const cleanedNames = names.map((n: string) => n.split(":")[0]);
+              const cleanedSaved = savedOllamaModel.split(":")[0];
+              if (!cleanedNames.includes(cleanedSaved)) {
+                const autoModel = names[0].split(":")[0];
+                setModel(autoModel);
+                localStorage.setItem("ollama_model", autoModel);
+                localStorage.setItem("ai_model", autoModel);
+              }
+            }
+          }
+        })
+        .catch(() => {});
+
+      const savedProvider = localStorage.getItem("ai_provider") || "ollama";
+
+      // Fix: read provider-specific key directly (avoids stale generic ai_model)
+      let savedModel = "";
+      if (savedProvider === "openrouter") savedModel = localStorage.getItem("openrouter_model") || "auto";
+      else if (savedProvider === "gemini") savedModel = localStorage.getItem("gemini_model") || "gemini-2.5-flash";
+      else if (savedProvider === "groq") savedModel = localStorage.getItem("groq_model") || "llama-3.3-70b-versatile";
+      else if (savedProvider === "openai") savedModel = localStorage.getItem("openai_model") || "gpt-4o-mini";
+      else if (savedProvider === "anthropic") savedModel = localStorage.getItem("anthropic_model") || "claude-3-5-sonnet-latest";
+      else savedModel = localStorage.getItem("ollama_model") || "llama3.1";
+
+      // Sanitize deprecated model names
       if (
         savedModel === "lynn/soliloquy-l2-13b:free" ||
         savedModel === "intel/neural-chat-7b-v3-1:free" ||
@@ -92,6 +154,7 @@ export default function AIControlPage() {
 
       setProvider(savedProvider);
       setModel(savedModel || (MODEL_MAP[savedProvider]?.[0] ?? "llama3.1"));
+      checkApiKey(savedProvider);
     }
   }, []);
 
@@ -100,6 +163,8 @@ export default function AIControlPage() {
     if (models.length > 0 && !models.includes(model)) {
       setModel(models[0]);
     }
+    checkApiKey(provider);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider]);
 
   useEffect(() => {
@@ -116,10 +181,24 @@ export default function AIControlPage() {
   }, [provider, model]);
 
   const handleSaveAndStart = () => {
+    // Save provider and model (the only config state this page manages)
+    localStorage.setItem("ai_provider", provider);
+    localStorage.setItem("ai_model", model);
+
+    // Also persist to the provider-specific model key
+    if (provider === "openrouter") localStorage.setItem("openrouter_model", model);
+    else if (provider === "gemini") localStorage.setItem("gemini_model", model);
+    else if (provider === "groq") localStorage.setItem("groq_model", model);
+    else if (provider === "openai") localStorage.setItem("openai_model", model);
+    else if (provider === "anthropic") localStorage.setItem("anthropic_model", model);
+    else localStorage.setItem("ollama_model", model);
+
+    // Indicate saved and navigate to chat
     setSaved(true);
     setTimeout(() => {
+      setSaved(false);
       router.push("/chat");
-    }, 600);
+    }, 800);
   };
 
   const handleSave = () => {
@@ -127,8 +206,15 @@ export default function AIControlPage() {
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const models = MODEL_MAP[provider] || [];
+  const models = provider === "ollama" && localModels.length > 0
+    ? Array.from(new Set([...localModels.map(m => m.split(":")[0]), ...(MODEL_MAP.ollama || [])]))
+    : MODEL_MAP[provider] || [];
+
   const greeting = user?.firstName ? `Welcome back, ${user.firstName}` : "Welcome back";
+  const isOllama = provider === "ollama";
+  const isKeyless = PROVIDERS.find(p => p.id === provider)?.keyless ?? false;
+  const initials = [user?.firstName?.[0], user?.lastName?.[0]].filter(Boolean).join("").toUpperCase() || "AI";
+  const hasPhoto = user?.photo && user.photo !== "/api/placeholder/120/120" && user.photo !== "";
 
   return (
     <AppShell>
@@ -136,11 +222,11 @@ export default function AIControlPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            {user?.photo && user.photo !== "/api/placeholder/120/120" ? (
-              <img src={user.photo} alt="Profile" className="size-12 rounded-full object-cover border-2 border-border shadow-md" />
+            {hasPhoto ? (
+              <img src={user!.photo} alt="Profile" className="size-12 rounded-full object-cover border-2 border-border shadow-md" />
             ) : (
               <div className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary text-lg font-bold">
-                {user?.firstName?.[0]}{user?.lastName?.[0]}
+                {initials}
               </div>
             )}
             <div>
@@ -148,7 +234,67 @@ export default function AIControlPage() {
               <p className="text-xs text-muted-foreground">Configure your AI engine and start working</p>
             </div>
           </div>
+
+          {/* Admin Console shortcut for admin users */}
+          {user?.role === "admin" && (
+            <button
+              onClick={() => router.push("/admin")}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-500/30 bg-amber-500/5 text-amber-500 text-xs font-semibold hover:bg-amber-500/10 transition-colors"
+            >
+              <ShieldCheck className="size-3.5" />
+              Admin Console
+            </button>
+          )}
         </div>
+
+        {/* API Key warning */}
+        {!isKeyless && !hasApiKey && (
+          <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+            <AlertTriangle className="size-4 text-amber-500 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-amber-500">No API key configured for this provider</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Go to{" "}
+                <button onClick={() => router.push("/settings")} className="underline hover:text-foreground transition-colors">
+                  Settings
+                </button>{" "}
+                to add your API key before starting a chat session.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Ollama connectivity hint */}
+        {isOllama && (
+          <div className="flex items-start gap-3 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+            <Cpu className="size-4 text-blue-400 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-blue-400">Local Ollama — no API key required</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Ensure Ollama is running at{" "}
+                <code className="text-blue-400">http://127.0.0.1:11434</code>. If the model isn&apos;t downloaded yet, run{" "}
+                <code className="text-blue-400">ollama pull {model}</code> in a terminal.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Ollama model missing warning */}
+        {isOllama && localModels.length > 0 && !localModels.includes(model) && !localModels.some(m => m.split(":")[0] === model.split(":")[0]) && (
+          <div className="flex items-start gap-3 rounded-xl border border-red-500/20 bg-red-500/5 p-4">
+            <AlertTriangle className="size-4 text-red-400 shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-red-400">Selected model &quot;{model}&quot; is not pulled yet</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                Your local Ollama instance doesn&apos;t have this model. Download it by running:
+                <code className="block mt-1 bg-red-500/10 p-1.5 rounded text-red-400 font-mono select-all w-fit">
+                  ollama pull {model}
+                </code>
+                Or select one of your installed models: <strong className="text-foreground">{localModels.map(m => m.split(":")[0]).join(", ")}</strong>.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* AI Engine Configuration */}
         <div className="rounded-xl border border-border bg-background/60 backdrop-blur-sm overflow-hidden">
@@ -156,8 +302,10 @@ export default function AIControlPage() {
             <Cpu className="size-4 text-primary" />
             <h2 className="text-sm font-bold text-foreground">AI Engine</h2>
             <div className="ml-auto flex items-center gap-1.5">
-              <div className="size-2 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-[10px] font-semibold text-green-500 uppercase">Ready</span>
+              <div className={`size-2 rounded-full animate-pulse ${hasApiKey || isKeyless ? "bg-green-500" : "bg-amber-500"}`} />
+              <span className={`text-[10px] font-semibold uppercase ${hasApiKey || isKeyless ? "text-green-500" : "text-amber-500"}`}>
+                {hasApiKey || isKeyless ? "Ready" : "Key Missing"}
+              </span>
             </div>
           </div>
 
@@ -169,6 +317,7 @@ export default function AIControlPage() {
                 {PROVIDERS.map((p) => {
                   const Icon = p.icon;
                   const isActive = provider === p.id;
+                  const pHasKey = hasKeys[p.id] ?? p.keyless;
                   return (
                     <button
                       key={p.id}
@@ -180,12 +329,17 @@ export default function AIControlPage() {
                       }`}
                     >
                       <Icon className={`size-4 shrink-0 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className={`text-xs font-semibold truncate ${isActive ? "text-foreground" : "text-muted-foreground"}`}>
                           {p.label}
                         </p>
                         <p className="text-[9px] text-muted-foreground truncate">{p.desc}</p>
                       </div>
+                      {!pHasKey && (
+                        <span title="No API key set" className="shrink-0 flex items-center">
+                          <AlertTriangle className="size-3 text-amber-500" />
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -208,11 +362,11 @@ export default function AIControlPage() {
 
             {/* Action Buttons */}
             <div className="flex items-center gap-3 pt-2">
-              <Button onClick={handleSaveAndStart} className="flex-1 h-11 font-semibold gap-2 text-sm">
+              <Button onClick={handleSaveAndStart} className="w-full h-11 font-semibold gap-2 text-sm">
                 {saved ? (
                   <>
                     <Check className="size-4" />
-                    Starting...
+                    Saving & Starting...
                   </>
                 ) : (
                   <>
@@ -220,9 +374,6 @@ export default function AIControlPage() {
                     Start Working
                   </>
                 )}
-              </Button>
-              <Button variant="outline" onClick={handleSave} className="h-11 px-5 text-xs font-semibold">
-                Save Config
               </Button>
             </div>
           </div>
