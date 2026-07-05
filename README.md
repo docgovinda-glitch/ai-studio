@@ -1,4 +1,6 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Studio
+
+AI Studio is a Next.js application for AI-assisted creation workflows. The current implementation includes the application shell, dashboard, project UI foundation, and an initial AI Kernel path for chatting with local Ollama models.
 
 ## Getting Started
 
@@ -16,9 +18,30 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Ollama Chat
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The `/chat` page routes messages through the AI Studio Kernel to Ollama.
+
+Optional server-side configuration:
+
+```bash
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OLLAMA_MODEL=llama3.1
+```
+
+Before using chat, make sure Ollama is running and the model is installed:
+
+```bash
+ollama pull llama3.1
+ollama serve
+```
+
+## Verification
+
+```bash
+npm run lint
+npm run build
+```
 
 ## Learn More
 

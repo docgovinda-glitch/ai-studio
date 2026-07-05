@@ -1,3 +1,6 @@
+"use client";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { TopNav } from "@/components/layout/top-nav";
 
@@ -6,6 +9,33 @@ type AppShellProps = {
 };
 
 export function AppShell({ children }: AppShellProps) {
+  const router = useRouter();
+  const [authorized, setAuthorized] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const isAuth = localStorage.getItem("is_authenticated");
+      if (isAuth !== "true") {
+        router.replace("/login");
+      } else {
+        setTimeout(() => {
+          setAuthorized(true);
+        }, 0);
+      }
+    }
+  }, [router]);
+
+  if (!authorized) {
+    return (
+      <div className="min-h-svh flex items-center justify-center bg-background text-foreground">
+        <div className="flex flex-col items-center gap-3">
+          <div className="size-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-xs text-muted-foreground font-semibold">Authorizing Everest AI Session...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-svh bg-background text-foreground">
       <div className="flex min-h-svh">

@@ -1,10 +1,5 @@
-import { DashboardOverview } from "@/components/dashboard/dashboard-overview";
-import { AppShell } from "@/components/layout/app-shell";
+import { redirect } from "next/navigation";
 
 export default function Home() {
-  return (
-    <AppShell>
-      <DashboardOverview />
-    </AppShell>
-  );
+  redirect("/ai-control");
 }

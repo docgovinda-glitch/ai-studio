@@ -1,0 +1,30 @@
+:root {
+  --color-bg: #0f0f0f;
+  --color-bg-light: #1a1a1a;
+  --color-accent-start: #ff6b6b;
+  --color-accent-end: #f7b801;
+  --color-primary: #ffffff;
+  --color-muted: #9ca3af;
+  --font-primary: 'Inter', sans-serif;
+  --radius-card: 1rem;
+  --shadow-card: 0 4px 6px rgba(0,0,0,0.3);
+}
+
+/* Global resets */
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-primary);
+  background-color: var(--color-bg);
+  color: var(--color-primary);
+  height: 100%;
+}
+
+/* Glass‑morphism utility class */
+.glass {
+  backdrop-filter: blur(12px);
+  background: rgba(255,255,255,0.08);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  border: 1px solid rgba(255,255,255,0.12);
+}

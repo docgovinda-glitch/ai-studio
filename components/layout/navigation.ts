@@ -18,8 +18,8 @@ export type NavigationItem = {
 
 export const navigationItems: NavigationItem[] = [
   {
-    title: "Dashboard",
-    href: "/",
+    title: "AI Control",
+    href: "/ai-control",
     icon: LayoutDashboard,
   },
   {
