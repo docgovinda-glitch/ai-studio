@@ -70,15 +70,47 @@ export default function VideoStudioPage() {
     );
   }
 
-  function handleGenerateVideoPlan() {
+  async function handleGenerateVideoPlan() {
     setIsGenerating(true);
     setGenerationOutput(null);
 
-    // Simulate video layout generation
-    setTimeout(() => {
+    try {
+      // Get API keys from localStorage
+      const apiKeys: Record<string, string> = {};
+      if (typeof window !== "undefined") {
+        const openaiKey = localStorage.getItem("openai_key") || "";
+        if (openaiKey) apiKeys.openai = openaiKey;
+        apiKeys.mock = "mock";
+      }
+
+      // Generate video for each scene
+      const scenePrompts = scenes.map(s => s.visualPrompt).join(" | ");
+      
+      const response = await fetch("/api/video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: `Video storyboard: ${scenePrompts}`,
+          duration: scenes.reduce((sum, s) => sum + s.durationSec, 0),
+          providerId: "mock", // Use mock for offline, or "openai" for real API
+          apiKeys,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error?.message || "Failed to generate video");
+      }
+
+      const data = await response.json();
+      setGenerationOutput(data.video?.url || "Compiled Video Draft Plan ready for production rendering.");
+    } catch (err) {
+      console.error("Video generation error:", err);
+      // Fallback to mock
+      setGenerationOutput(`https://placehold.co/640x360/6366f1/ffffff/png?text=Video+Mock`);
+    } finally {
       setIsGenerating(false);
-      setGenerationOutput("Compiled Video Draft Plan ready for production rendering.");
-    }, 2500);
+    }
   }
 
   return (

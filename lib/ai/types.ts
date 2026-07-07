@@ -53,20 +53,10 @@ export type AiGenerateImageResponse = {
   metadata?: Record<string, string | number | boolean>;
 };
 
-export type AiProvider = AiProviderMetadata & {
-  generateText(request: AiGenerateTextRequest): Promise<AiGenerateTextResponse>;
-  generateTextStream?(request: AiGenerateTextRequest): Promise<ReadableStream>;
-  generateImage?(request: AiGenerateImageRequest): Promise<AiGenerateImageResponse>;
-};
-
-export type AiKernelGenerateTextRequest = AiGenerateTextRequest & {
-  providerId?: string;
-  apiKeys?: Record<string, string>;
-};
-
 // Voice types
 export type AiGenerateVoiceRequest = {
   text: string;
+  model?: string;
   voice?: string;
   speed?: number;
   pitch?: number;
@@ -86,9 +76,9 @@ export type AiGenerateVoiceResponse = {
 // Video types
 export type AiGenerateVideoRequest = {
   prompt: string;
+  model?: string;
   duration?: number;
   style?: string;
-  model?: string;
   signal?: AbortSignal;
   apiKey?: string;
 };
@@ -98,4 +88,27 @@ export type AiGenerateVideoResponse = {
   model: string;
   videoUrl?: string;
   metadata?: Record<string, string | number | boolean>;
+};
+
+export type AiProvider = AiProviderMetadata & {
+  generateText(request: AiGenerateTextRequest): Promise<AiGenerateTextResponse>;
+  generateTextStream?(request: AiGenerateTextRequest): Promise<ReadableStream>;
+  generateImage?(request: AiGenerateImageRequest): Promise<AiGenerateImageResponse>;
+  generateVoice?(request: AiGenerateVoiceRequest): Promise<AiGenerateVoiceResponse>;
+  generateVideo?(request: AiGenerateVideoRequest): Promise<AiGenerateVideoResponse>;
+};
+
+export type AiKernelGenerateTextRequest = AiGenerateTextRequest & {
+  providerId?: string;
+  apiKeys?: Record<string, string>;
+};
+
+export type AiKernelGenerateVoiceRequest = AiGenerateVoiceRequest & {
+  providerId?: string;
+  apiKeys?: Record<string, string>;
+};
+
+export type AiKernelGenerateVideoRequest = AiGenerateVideoRequest & {
+  providerId?: string;
+  apiKeys?: Record<string, string>;
 };

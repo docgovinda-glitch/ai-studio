@@ -1,329 +1,438 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { PenLine, Bot, Sparkles, Wand2, Copy, Check, FileDown, ArrowRight } from "lucide-react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import {
+  PenLine,
+  Send,
+  Bot,
+  User,
+  Copy,
+  Check,
+  FileDown,
+  RefreshCw,
+  Settings,
+  Mic,
+  Paperclip,
+  Sparkles,
+  GraduationCap,
+  Mail,
+  BookOpen,
+  Globe,
+  FileText,
+  Languages,
+  ArrowRight,
+} from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
 
+type Message = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+const quickActionCards = [
+  {
+    icon: PenLine,
+    title: "Draft Article",
+    description: "Create a well-structured article on any topic",
+    prompt: "Help me draft a well-structured article about",
+  },
+  {
+    icon: GraduationCap,
+    title: "Academic Paper",
+    description: "Write research papers with proper citations",
+    prompt: "Help me write an academic paper on",
+  },
+  {
+    icon: Mail,
+    title: "Email",
+    description: "Compose professional emails",
+    prompt: "Help me write a professional email about",
+  },
+  {
+    icon: BookOpen,
+    title: "Blog Post",
+    description: "Create engaging blog content",
+    prompt: "Help me write a blog post about",
+  },
+  {
+    icon: FileText,
+    title: "Research Proposal",
+    description: "Structure research proposals",
+    prompt: "Help me draft a research proposal for",
+  },
+  {
+    icon: BookOpen,
+    title: "Literature Review",
+    description: "Summarize academic literature",
+    prompt: "Help me write a literature review on",
+  },
+  {
+    icon: RefreshCw,
+    title: "Rewrite Text",
+    description: "Rephrase existing content",
+    prompt: "Help me rewrite the following text to be",
+  },
+  {
+    icon: Sparkles,
+    title: "Improve Grammar",
+    description: "Fix grammar and style issues",
+    prompt: "Help me improve the grammar and style of",
+  },
+  {
+    icon: Globe,
+    title: "Translate",
+    description: "Translate to other languages",
+    prompt: "Translate the following text to",
+  },
+  {
+    icon: FileText,
+    title: "Executive Summary",
+    description: "Summarize long documents",
+    prompt: "Help me create an executive summary of",
+  },
+];
+
+const writingTools = [
+  { label: "Academic", prompt: "in an academic tone with formal language" },
+  { label: "Formal", prompt: "in a formal, professional tone" },
+  { label: "Casual", prompt: "in a casual, conversational tone" },
+  { label: "Creative", prompt: "in a creative, engaging style" },
+  { label: "Concise", prompt: "to be more concise and to the point" },
+  { label: "Expand", prompt: "to expand and add more detail" },
+  { label: "Summarize", prompt: "to summarize the key points" },
+  { label: "Grammar", prompt: "to fix grammar and improve clarity" },
+  { label: "Translate", prompt: "to translate into another language" },
+];
+
 export default function WritingStudioPage() {
-  const [title, setTitle] = useState("Creator Launch Campaign - Blog Post");
-  const [content, setContent] = useState(
-    `# Launch Campaign: The Future of AI Studios\n\nWriting content should not involve switching back and forth between context-less chatbot tabs and separate writing processors. AI Studio unifies the full lifecycle of content creation inside a single professional dashboard.\n\n## Core Objective\nDescribe how creators, researchers, and developers benefit from an integrated workflow kernel.`
-  );
-  const [aiPrompt, setAiPrompt] = useState("");
-  const [aiResponse, setAiResponse] = useState("");
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [inserted, setInserted] = useState(false);
+  const [activeTool, setActiveTool] = useState<string | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const quickPrompts = [
-    { label: "Outline blog", prompt: "Create a 4-step blog post outline based on this content" },
-    { label: "Suggest catchy hooks", prompt: "Draft 3 engaging hooks/introductions for this article" },
-    { label: "Improve structure", prompt: "Review my draft text and suggest structural improvements" },
-    { label: "Draft call-to-action", prompt: "Create an inspiring conclusion and call-to-action (CTA) for the end" },
-  ];
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
-  const handleAiAssist = useCallback(async (customPrompt?: string) => {
-    const promptToSend = customPrompt ?? aiPrompt;
-    if (!promptToSend.trim() || isGenerating) return;
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
+  // Auto-grow textarea
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
+    }
+  }, [input]);
+
+  const handleSend = useCallback(async () => {
+    if (!input.trim() || isGenerating) return;
+
+    const userMessage = input.trim();
+    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+    setInput("");
     setIsGenerating(true);
-    setAiResponse("");
-    setInserted(false);
 
     try {
-      // Build context: send current document state + instructions
-      const messages = [
-        {
-          role: "system",
-          content: "You are the Writing Assistant in AI Studio. Analyze the provided document context and follow the user instructions exactly.",
-        },
-        {
-          role: "user",
-          content: `Document Title: ${title}\n\nDocument Content:\n${content}\n\nInstruction: ${promptToSend}`,
-        },
-      ];
-
-      const activeProvider = typeof window !== "undefined" ? localStorage.getItem("ai_provider") ?? "ollama" : "ollama";
-      const apiKeys = typeof window !== "undefined" ? {
-        openrouter: localStorage.getItem("openrouter_key") || "",
-        gemini: localStorage.getItem("gemini_key") || "",
-        groq: localStorage.getItem("groq_key") || "",
-        openai: localStorage.getItem("openai_key") || "",
-        anthropic: localStorage.getItem("anthropic_key") || "",
-        ollama: localStorage.getItem("local_engine") || "ollama",
-      } : {};
-
-      let targetModel = "";
+      const apiKeys: Record<string, string> = {};
       if (typeof window !== "undefined") {
-        if (activeProvider === "openrouter") {
-          targetModel = localStorage.getItem("openrouter_model") || "auto";
-        } else if (activeProvider === "gemini") {
-          targetModel = localStorage.getItem("gemini_model") || "gemini-2.5-flash";
-        } else if (activeProvider === "groq") {
-          targetModel = localStorage.getItem("groq_model") || "llama-3.3-70b-versatile";
-        } else if (activeProvider === "openai") {
-          targetModel = localStorage.getItem("openai_model") || "gpt-4o-mini";
-        } else if (activeProvider === "anthropic") {
-          targetModel = localStorage.getItem("anthropic_model") || "claude-3-5-sonnet-latest";
-        } else if (activeProvider === "ollama") {
-          targetModel = localStorage.getItem("ollama_model") || "llama3.1";
-        }
+        const openaiKey = localStorage.getItem("openai_key") || "";
+        const openrouterKey = localStorage.getItem("openrouter_key") || "";
+        const geminiKey = localStorage.getItem("gemini_key") || "";
+        const groqKey = localStorage.getItem("groq_key") || "";
+        const anthropicKey = localStorage.getItem("anthropic_key") || "";
+        const deepseekKey = localStorage.getItem("deepseek_key") || "";
+        const togetherKey = localStorage.getItem("together_key") || "";
+
+        if (openaiKey) apiKeys.openai = openaiKey;
+        if (openrouterKey) apiKeys.openrouter = openrouterKey;
+        if (geminiKey) apiKeys.gemini = geminiKey;
+        if (groqKey) apiKeys.groq = groqKey;
+        if (anthropicKey) apiKeys.anthropic = anthropicKey;
+        if (deepseekKey) apiKeys.deepseek = deepseekKey;
+        if (togetherKey) apiKeys.together = togetherKey;
       }
 
-      let mlRoutedOption = "";
-      const mlRoutingEnabled = typeof window !== "undefined" && localStorage.getItem("ml_routing_enabled") === "true";
-      
-      if (mlRoutingEnabled && typeof window !== "undefined") {
-        const logsRaw = localStorage.getItem("ai_telemetry_logs");
-        type LogEntry = { option: string; latencyMs: number; success: boolean };
-        let logs: LogEntry[] = [];
-        if (logsRaw) {
-          try { logs = JSON.parse(logsRaw); } catch {}
-        }
-        
-        const options = ["Option 1 (Free)", "Option 2 (Paid)", "Option 3 (Local)"];
-        const scores = options.map((opt) => {
-          const optLogs = logs.filter((l) => l.option === opt);
-          const successCount = optLogs.filter((l) => l.success).length;
-          const failureCount = optLogs.length - successCount;
-          
-          const alpha = successCount + 1;
-          const beta = failureCount + 1;
-          const sample = Math.random() * (alpha / (alpha + beta));
-          
-          const latencies = optLogs.map((l) => l.latencyMs);
-          const avgLatency = latencies.length > 0 
-            ? latencies.reduce((a: number, b: number) => a + b, 0) / latencies.length 
-            : 800;
-            
-          return { option: opt, score: sample * (1000 / avgLatency) };
-        });
-        
-        scores.sort((a, b) => b.score - a.score);
-        const bestOption = scores[0].option;
-        mlRoutedOption = bestOption;
+      const activeProvider =
+        typeof window !== "undefined"
+          ? localStorage.getItem("ai_provider") || "openai"
+          : "openai";
+
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [
+            {
+              role: "system",
+              content:
+                "You are a helpful writing assistant. Help users draft, edit, and improve their text content. Be concise and helpful.",
+            },
+            ...messages.map((m) => ({ role: m.role, content: m.content })),
+            { role: "user", content: userMessage },
+          ],
+          providerId: activeProvider,
+          apiKeys,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to get response");
       }
 
-      const startTime = Date.now();
-      let res: Response;
-      let success = false;
-
-      try {
-        res = await fetch("/api/chat", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messages,
-            providerId: activeProvider,
-            model: targetModel || undefined,
-            apiKeys,
-          }),
-        });
-        success = res.ok;
-      } catch (err) {
-        success = false;
-        throw err;
-      } finally {
-        const endTime = Date.now();
-        const latencyMs = endTime - startTime;
-        
-        if (typeof window !== "undefined") {
-          const currentOption = mlRoutedOption || (
-            activeProvider === "ollama" ? "Option 3 (Local)" :
-            (activeProvider === "openrouter" && targetModel === "auto") ? "Option 1 (Free)" : "Option 2 (Paid)"
-          );
-          
-          const logsRaw = localStorage.getItem("ai_telemetry_logs");
-          type LogEntry = { option: string; latencyMs: number; success: boolean; timestamp?: number };
-          let logs: LogEntry[] = [];
-          if (logsRaw) {
-            try { logs = JSON.parse(logsRaw); } catch {}
-          }
-          logs.push({
-            timestamp: Date.now(),
-            option: currentOption,
-            latencyMs,
-            success
-          });
-          if (logs.length > 100) logs.shift();
-          localStorage.setItem("ai_telemetry_logs", JSON.stringify(logs));
-        }
-      }
-
-      if (!res.ok) {
-        throw new Error("AI Assistant failed to generate content.");
-      }
-
-      const data = await res.json();
-      setAiResponse(data.message?.content ?? "");
+      const data = await response.json();
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content:
+            data.message?.content ||
+            "Sorry, I couldn't generate a response.",
+        },
+      ]);
     } catch (err) {
-      setAiResponse(err instanceof Error ? err.message : "Failed to generate assistance.");
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content:
+            "Sorry, I encountered an error. Please check your API key configuration in Settings.",
+        },
+      ]);
     } finally {
       setIsGenerating(false);
     }
-  }, [aiPrompt, isGenerating, title, content]);
+  }, [input, isGenerating, messages]);
 
-  function handleInsertContent() {
-    setContent((prev) => `${prev}\n\n${aiResponse}`);
-    setInserted(true);
-    setTimeout(() => setInserted(false), 2000);
-  }
-
-  function handleCopyResponse() {
-    navigator.clipboard.writeText(aiResponse);
+  const handleCopy = (content: string) => {
+    navigator.clipboard.writeText(content);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const handleQuickAction = (prompt: string) => {
+    setInput(prompt);
+    textareaRef.current?.focus();
+  };
+
+  const handleToolClick = (tool: string, modifier: string) => {
+    setActiveTool(tool);
+    if (input.trim()) {
+      setInput((prev) => `${prev} ${modifier}`);
+    }
+  };
 
   return (
     <AppShell>
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+      <div className="flex h-full flex-col">
         {/* Header */}
-        <section className="rounded-lg border border-border bg-card p-6 text-card-foreground shadow-sm">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <PenLine className="size-5 text-muted-foreground" aria-hidden="true" />
-                <p className="text-sm font-medium text-muted-foreground">Creative Studio</p>
+        <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur">
+          <div className="flex h-16 items-center justify-between px-4 sm:px-6">
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+                <PenLine className="size-5" />
               </div>
-              <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Writing Studio</h1>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Draft long-form content, campaign scripts, and articles with in-context AI assistance.
-              </p>
+              <div>
+                <h1 className="text-lg font-semibold">Writing Studio</h1>
+                <p className="text-xs text-muted-foreground">
+                  Draft, edit, rewrite, summarize, translate and improve any
+                  document using AI
+                </p>
+              </div>
             </div>
-            <div className="flex items-center gap-2 self-start sm:self-center">
-              <Button variant="outline" size="sm" onClick={() => {
-                const blob = new Blob([`# ${title}\n\n${content}`], { type: "text/markdown" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `${title.toLowerCase().replace(/\s+/g, "-")}.md`;
-                a.click();
-              }}>
-                <FileDown className="size-4" /> Export MD
-              </Button>
-            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => (window.location.href = "/settings")}
+              aria-label="Settings"
+            >
+              <Settings className="size-4" />
+            </Button>
           </div>
-        </section>
+        </header>
 
-        {/* Studio Workspace */}
-        <div className="grid gap-6 lg:grid-cols-[1fr_24rem]">
-          {/* Left Editor */}
-          <section className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-sm">
-            <div className="flex flex-col gap-2">
-              <label htmlFor="editor-title" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Document Title
-              </label>
-              <input
-                id="editor-title"
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="text-lg font-bold bg-transparent border-b border-transparent hover:border-border focus:border-primary outline-none py-1 transition-colors"
-                placeholder="Untitled Document"
-              />
-            </div>
-
-            <div className="flex flex-1 flex-col gap-2 min-h-[30rem]">
-              <label htmlFor="editor-content" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Body Content (Markdown Supported)
-              </label>
-              <textarea
-                id="editor-content"
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                className="flex-1 w-full min-h-[25rem] resize-none rounded-lg border border-input bg-background/50 px-4 py-3 text-sm leading-6 outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 font-mono"
-                placeholder="Start drafting your masterpiece..."
-              />
-            </div>
-          </section>
-
-          {/* Right AI Copilot */}
-          <aside className="flex flex-col gap-4">
-            <div className="rounded-lg border border-border bg-card p-5 text-card-foreground shadow-sm flex flex-col gap-4">
-              <div className="flex items-center gap-3">
-                <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                  <Bot className="size-4" aria-hidden="true" />
+        {/* Main Content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
+            {messages.length === 0 ? (
+              // Hero Welcome Section
+              <div className="flex min-h-[calc(100vh-12rem)] flex-col items-center justify-center">
+                <div className="text-center mb-12">
+                  <div className="mx-auto mb-6 flex size-20 items-center justify-center rounded-2xl bg-primary/10">
+                    <PenLine className="size-10 text-primary" />
+                  </div>
+                  <h2 className="text-3xl font-bold tracking-tight sm:text-4xl mb-3">
+                    Writing Studio
+                  </h2>
+                  <p className="text-lg text-muted-foreground max-w-lg mx-auto">
+                    Draft, edit, rewrite, summarize, translate and improve any
+                    document using AI
+                  </p>
                 </div>
-                <div>
-                  <h2 className="text-sm font-semibold">Writing Copilot</h2>
-                  <p className="text-xs text-muted-foreground">Powered by Developer Mock</p>
+
+                <h3 className="text-xl font-semibold mb-6">
+                  What would you like to write today?
+                </h3>
+
+                {/* Quick Action Cards */}
+                <div className="grid w-full max-w-2xl gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {quickActionCards.map((card) => {
+                    const Icon = card.icon;
+                    return (
+                      <button
+                        key={card.title}
+                        onClick={() => handleQuickAction(card.prompt)}
+                        className="group flex flex-col items-start gap-3 rounded-xl border border-border bg-card p-4 text-left transition-all hover:shadow-lg hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary/20">
+                          <Icon className="size-5" />
+                        </div>
+                        <div>
+                          <h4 className="font-semibold text-sm">
+                            {card.title}
+                          </h4>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {card.description}
+                          </p>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-
-              {/* Quick Actions */}
-              <div className="grid grid-cols-2 gap-2">
-                {quickPrompts.map((qp) => (
-                  <button
-                    key={qp.label}
-                    onClick={() => {
-                      setAiPrompt(qp.prompt);
-                      handleAiAssist(qp.prompt);
-                    }}
-                    className="flex flex-col items-start gap-1 rounded-lg border border-border bg-background p-2.5 text-left text-xs transition-colors hover:bg-accent/40"
+            ) : (
+              // Chat Messages
+              <div className="space-y-8">
+                {messages.map((message, index) => (
+                  <div
+                    key={index}
+                    className="flex gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300"
                   >
-                    <Sparkles className="size-3 text-primary shrink-0" />
-                    <span className="font-medium text-foreground">{qp.label}</span>
-                  </button>
-                ))}
-              </div>
-
-              {/* Custom Prompt Box */}
-              <div className="flex flex-col gap-2">
-                <label htmlFor="copilot-prompt" className="text-xs font-medium text-muted-foreground">
-                  Ask Copilot
-                </label>
-                <div className="relative">
-                  <textarea
-                    id="copilot-prompt"
-                    value={aiPrompt}
-                    onChange={(e) => setAiPrompt(e.target.value)}
-                    placeholder="e.g. Expand this paragraph, rewrite in a professional tone..."
-                    className="h-20 w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-xs outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-                  />
-                  <Button
-                    onClick={() => handleAiAssist()}
-                    disabled={isGenerating || !aiPrompt.trim()}
-                    size="xs"
-                    className="absolute bottom-2 right-2"
-                  >
-                    {isGenerating ? "Thinking..." : "Generate"}
-                    <Wand2 className="size-3" />
-                  </Button>
-                </div>
-              </div>
-
-              {/* Copilot Response */}
-              {aiResponse && (
-                <div className="rounded-lg border border-border bg-muted/30 p-4 flex flex-col gap-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                      <Sparkles className="size-3 text-primary" /> Assistant Suggestion
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon-xs" onClick={handleCopyResponse} title="Copy to clipboard">
-                        {copied ? <Check className="size-3 text-green-500" /> : <Copy className="size-3" />}
-                      </Button>
-                      <Button variant="ghost" size="icon-xs" onClick={handleInsertContent} title="Append to editor">
-                        {inserted ? <Check className="size-3 text-green-500" /> : <ArrowRight className="size-3" />}
-                      </Button>
+                    <div
+                      className={`flex size-8 shrink-0 items-center justify-center rounded-full ${
+                        message.role === "assistant"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted"
+                      }`}
+                    >
+                      {message.role === "assistant" ? (
+                        <Bot className="size-4" />
+                      ) : (
+                        <User className="size-4" />
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-base leading-relaxed text-foreground whitespace-pre-wrap">
+                        {message.content}
+                      </p>
+                      {message.role === "assistant" && (
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="mt-3"
+                          onClick={() => handleCopy(message.content)}
+                          aria-label="Copy message"
+                        >
+                          {copied ? (
+                            <Check className="size-3 text-green-500" />
+                          ) : (
+                            <Copy className="size-3" />
+                          )}
+                        </Button>
+                      )}
                     </div>
                   </div>
-                  <div className="text-xs leading-5 text-foreground max-h-60 overflow-y-auto whitespace-pre-wrap font-mono border-t border-border pt-2">
-                    {aiResponse}
-                  </div>
-                  <Button size="xs" variant="outline" className="w-full text-xs" onClick={handleInsertContent}>
-                    {inserted ? "Appended!" : "Insert into Editor"}
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Composer */}
+        <footer className="border-t border-border bg-background/50 p-4 backdrop-blur sm:p-6">
+          <div className="mx-auto w-full max-w-3xl">
+            {/* Writing Tools Toolbar */}
+            <div className="mb-3 flex flex-wrap gap-2">
+              {writingTools.map((tool) => (
+                <button
+                  key={tool.label}
+                  onClick={() => handleToolClick(tool.label, tool.prompt)}
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
+                    activeTool === tool.label
+                      ? "bg-primary text-primary-foreground"
+                      : "border border-border bg-card hover:bg-accent"
+                  }`}
+                >
+                  {tool.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Input Area */}
+            <div className="relative">
+              <div className="rounded-2xl border border-border bg-card shadow-lg transition-all focus-within:shadow-xl">
+                <textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Ask Writing Studio to draft, rewrite, summarize or improve your text..."
+                  className="w-full resize-none rounded-2xl border-0 bg-transparent px-4 py-3 pr-24 text-base outline-none placeholder:text-muted-foreground min-h-20 max-h-48"
+                  disabled={isGenerating}
+                  rows={1}
+                />
+                <div className="absolute bottom-2 right-2 flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Attach file"
+                    disabled={isGenerating}
+                  >
+                    <Paperclip className="size-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Voice input"
+                    disabled={isGenerating}
+                  >
+                    <Mic className="size-4" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    onClick={handleSend}
+                    disabled={isGenerating || !input.trim()}
+                    className="rounded-xl"
+                  >
+                    {isGenerating ? (
+                      <RefreshCw className="size-4 animate-spin" />
+                    ) : (
+                      <Send className="size-4" />
+                    )}
                   </Button>
                 </div>
-              )}
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Press Enter to send, Shift+Enter for new line
+              </p>
             </div>
-          </aside>
-        </div>
+          </div>
+        </footer>
       </div>
     </AppShell>
   );

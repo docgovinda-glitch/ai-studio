@@ -106,7 +106,7 @@ Write the draft section in full, ready-to-publish academic prose. Do not leave p
     ];
 
     const apiKeys: Record<string, string> = {};
-    const provider = projectState?.aiSettings?.provider || "gemini";
+    const provider = projectState?.aiSettings?.provider || "mock";
     
     if (projectState?.aiSettings?.geminiApiKey) apiKeys.gemini = projectState.aiSettings.geminiApiKey;
     if (projectState?.aiSettings?.openaiApiKey) apiKeys.openai = projectState.aiSettings.openaiApiKey;

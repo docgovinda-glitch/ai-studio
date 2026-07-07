@@ -6,6 +6,10 @@ import {
   AiGenerateTextResponse,
   AiGenerateImageRequest,
   AiGenerateImageResponse,
+  AiGenerateVoiceRequest,
+  AiGenerateVoiceResponse,
+  AiGenerateVideoRequest,
+  AiGenerateVideoResponse,
   AiProvider,
   AiProviderMetadata,
 } from "@/lib/ai/types";
@@ -16,6 +20,8 @@ import { createGroqProvider } from "@/lib/ai/providers/groq";
 import { createOpenAIProvider } from "@/lib/ai/providers/openai";
 import { createAnthropicProvider } from "@/lib/ai/providers/anthropic";
 import { createMockProvider } from "@/lib/ai/providers/mock";
+import { createTogetherProvider } from "@/lib/ai/providers/together";
+import { createDeepSeekProvider } from "@/lib/ai/providers/deepseek";
 
 export class AiKernel {
   private readonly providers: Map<string, AiProvider>;
@@ -168,6 +174,92 @@ export class AiKernel {
       apiKey,
     });
   }
+
+  async generateVoice(
+    request: AiGenerateVoiceRequest & { providerId?: string; apiKeys?: Record<string, string> }
+  ): Promise<AiGenerateVoiceResponse> {
+    const providerId = request.providerId || this.defaultProviderId;
+    const provider = this.providers.get(providerId);
+
+    if (!provider) {
+      throw new AiProviderRequestError(
+        `AI provider "${providerId}" is not registered.`,
+        400
+      );
+    }
+
+    if (!provider.capabilities.includes("voice")) {
+      throw new AiProviderRequestError(
+        `AI provider "${providerId}" does not support voice generation.`,
+        400
+      );
+    }
+
+    if (!provider.generateVoice) {
+      throw new AiProviderRequestError(
+        `AI provider "${providerId}" does not support voice generation.`,
+        400
+      );
+    }
+
+    const apiKey = request.apiKeys?.[providerId] || getEnvKey(providerId);
+    const isKeyless = providerId === "ollama" || providerId === "mock";
+
+    if (!isKeyless && (!apiKey || !apiKey.trim())) {
+      throw new AiProviderRequestError(
+        `API key for "${providerId}" is missing. Please configure it in Settings.`,
+        400
+      );
+    }
+
+    return provider.generateVoice({
+      ...request,
+      apiKey,
+    });
+  }
+
+  async generateVideo(
+    request: AiGenerateVideoRequest & { providerId?: string; apiKeys?: Record<string, string> }
+  ): Promise<AiGenerateVideoResponse> {
+    const providerId = request.providerId || this.defaultProviderId;
+    const provider = this.providers.get(providerId);
+
+    if (!provider) {
+      throw new AiProviderRequestError(
+        `AI provider "${providerId}" is not registered.`,
+        400
+      );
+    }
+
+    if (!provider.capabilities.includes("video")) {
+      throw new AiProviderRequestError(
+        `AI provider "${providerId}" does not support video generation.`,
+        400
+      );
+    }
+
+    if (!provider.generateVideo) {
+      throw new AiProviderRequestError(
+        `AI provider "${providerId}" does not support video generation.`,
+        400
+      );
+    }
+
+    const apiKey = request.apiKeys?.[providerId] || getEnvKey(providerId);
+    const isKeyless = providerId === "ollama" || providerId === "mock";
+
+    if (!isKeyless && (!apiKey || !apiKey.trim())) {
+      throw new AiProviderRequestError(
+        `API key for "${providerId}" is missing. Please configure it in Settings.`,
+        400
+      );
+    }
+
+    return provider.generateVideo({
+      ...request,
+      apiKey,
+    });
+  }
 }
 
 function getEnvKey(providerId: string): string | undefined {
@@ -182,6 +274,10 @@ function getEnvKey(providerId: string): string | undefined {
       return process.env.OPENAI_API_KEY;
     case "anthropic":
       return process.env.ANTHROPIC_API_KEY;
+    case "together":
+      return process.env.TOGETHER_API_KEY;
+    case "deepseek":
+      return process.env.DEEPSEEK_API_KEY;
     default:
       return undefined;
   }
@@ -195,6 +291,8 @@ export function createAiKernel() {
     createGeminiProvider(),
     createGroqProvider(),
     createOpenAIProvider(),
-    createAnthropicProvider()
+    createAnthropicProvider(),
+    createTogetherProvider(),
+    createDeepSeekProvider()
   ], "mock");
 }

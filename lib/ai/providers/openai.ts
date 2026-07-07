@@ -5,6 +5,10 @@ import {
   AiGenerateTextResponse,
   AiGenerateImageRequest,
   AiGenerateImageResponse,
+  AiGenerateVoiceRequest,
+  AiGenerateVoiceResponse,
+  AiGenerateVideoRequest,
+  AiGenerateVideoResponse,
   AiProvider,
 } from "@/lib/ai/types";
 import {
@@ -36,7 +40,7 @@ export function createOpenAIProvider(): AiProvider {
   return {
     id: "openai",
     name: "OpenAI (Cloud)",
-    capabilities: ["chat", "image"],
+    capabilities: ["chat", "image", "voice", "video"],
     defaultModel,
     async generateText(
       request: AiGenerateTextRequest
@@ -324,6 +328,191 @@ export function createOpenAIProvider(): AiProvider {
           if (error.name === "AbortError") {
             throw new AiProviderUnavailableError(
               "OpenAI image request timed out before returning a response."
+            );
+          }
+          if ("code" in error && error.code === "ECONNREFUSED") {
+            throw new AiProviderUnavailableError(
+              "Failed to establish connection to OpenAI endpoints."
+            );
+          }
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeout);
+      }
+    },
+
+    async generateVoice(
+      request: AiGenerateVoiceRequest
+    ): Promise<AiGenerateVoiceResponse> {
+      const apiKey = request.apiKey ?? process.env.OPENAI_API_KEY;
+
+      if (!apiKey || !apiKey.trim()) {
+        throw new AiProviderUnavailableError(
+          "OpenAI API key is missing. Set it in Settings to enable this cloud provider."
+        );
+      }
+
+      if (!request.text || !request.text.trim()) {
+        throw new AiValidationError("Text is required for voice generation.");
+      }
+
+      const model = request.model ?? "tts-4o-mini";
+      const voice = request.voice ?? "alloy";
+      const speed = request.speed ?? 1.0;
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+      if (request.signal) {
+        request.signal.addEventListener("abort", () => controller.abort(), {
+          once: true,
+        });
+      }
+
+      try {
+        const response = await fetch("https://api.openai.com/v1/audio/speech", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model,
+            input: request.text,
+            voice,
+            speed,
+            response_format: request.format || "mp3",
+          }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          const body = await response.text();
+          let parsedError = body;
+          try {
+            const json = JSON.parse(body);
+            parsedError = json.error?.message ?? body;
+          } catch {}
+
+          throw new AiProviderRequestError(
+            `OpenAI Voice generation failed: ${parsedError}`,
+            response.status
+          );
+        }
+
+        // Convert audio to base64
+        const arrayBuffer = await response.arrayBuffer();
+        const base64 = Buffer.from(arrayBuffer).toString("base64");
+        const dataUrl = `data:audio/mp3;base64,${base64}`;
+
+        return {
+          providerId: "openai",
+          model,
+          audioBase64: dataUrl,
+          metadata: {
+            voice,
+            speed,
+          },
+        };
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.name === "AbortError") {
+            throw new AiProviderUnavailableError(
+              "OpenAI voice request timed out before returning a response."
+            );
+          }
+          if ("code" in error && error.code === "ECONNREFUSED") {
+            throw new AiProviderUnavailableError(
+              "Failed to establish connection to OpenAI endpoints."
+            );
+          }
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeout);
+      }
+    },
+
+    async generateVideo(
+      request: AiGenerateVideoRequest
+    ): Promise<AiGenerateVideoResponse> {
+      const apiKey = request.apiKey ?? process.env.OPENAI_API_KEY;
+
+      if (!apiKey || !apiKey.trim()) {
+        throw new AiProviderUnavailableError(
+          "OpenAI API key is missing. Set it in Settings to enable this cloud provider."
+        );
+      }
+
+      if (!request.prompt || !request.prompt.trim()) {
+        throw new AiValidationError("A prompt is required for video generation.");
+      }
+
+      const model = request.model ?? "sora";
+      const duration = request.duration ?? 5;
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 120_000);
+
+      if (request.signal) {
+        request.signal.addEventListener("abort", () => controller.abort(), {
+          once: true,
+        });
+      }
+
+      try {
+        // Note: Sora API is not yet publicly available, this is a placeholder
+        // When Sora becomes available, update the endpoint and request format
+        const response = await fetch("https://api.openai.com/v1/videos/generations", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model,
+            prompt: request.prompt,
+            duration,
+            style: request.style,
+          }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          const body = await response.text();
+          let parsedError = body;
+          try {
+            const json = JSON.parse(body);
+            parsedError = json.error?.message ?? body;
+          } catch {}
+
+          throw new AiProviderRequestError(
+            `OpenAI Video generation failed: ${parsedError}`,
+            response.status
+          );
+        }
+
+        const payload = await response.json();
+        const videoUrl = payload.data?.[0]?.url;
+
+        return {
+          providerId: "openai",
+          model,
+          videoUrl,
+          metadata: {
+            duration,
+          },
+        };
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.name === "AbortError") {
+            throw new AiProviderUnavailableError(
+              "OpenAI video request timed out before returning a response."
             );
           }
           if ("code" in error && error.code === "ECONNREFUSED") {

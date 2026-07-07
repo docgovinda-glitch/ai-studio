@@ -16,6 +16,8 @@ export type {
   AiGenerateVideoRequest,
   AiGenerateVideoResponse,
   AiKernelGenerateTextRequest,
+  AiKernelGenerateVoiceRequest,
+  AiKernelGenerateVideoRequest,
   AiProvider,
   AiProviderMetadata,
   AiRole,

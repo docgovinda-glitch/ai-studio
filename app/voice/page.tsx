@@ -1,263 +1,267 @@
 "use client";
 
-import { useState } from "react";
-import { AudioLines, Play, Pause, Download, Volume2, Sparkles, RefreshCw, Upload, Mic } from "lucide-react";
-
+import { useState, useEffect, useRef } from "react";
+import {
+  AudioLines,
+  Play,
+  Pause,
+  Download,
+  RefreshCw,
+  Send,
+  Settings,
+  User,
+  Bot,
+  Copy,
+  Check,
+  Sparkles,
+  Mic,
+  Volume2,
+} from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
 
+type Message = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+const VOICE_OPTIONS = [
+  { id: "male", name: "Male Voice", description: "Deep, authoritative tone" },
+  { id: "female", name: "Female Voice", description: "Clear, natural tone" },
+  { id: "child", name: "Child Voice", description: "Young, energetic tone" },
+];
+
+const QUICK_ACTIONS = [
+  { label: "Narration", prompt: "Narrate this text in a professional tone" },
+  { label: "Audiobook", prompt: "Read this as an audiobook with expression" },
+  { label: "News Report", prompt: "Read this as a news report" },
+  { label: "Podcast Intro", prompt: "Create a podcast intro for this" },
+  { label: "Presentation", prompt: "Present this text confidently" },
+  { label: "Storytelling", prompt: "Tell this story engagingly" },
+];
+
 export default function VoiceStudioPage() {
-  const [activeTab, setActiveTab] = useState<"tts" | "clone">("tts");
-  const [text, setText] = useState(
-    "Welcome to the AI Studio Voice workspace. You can draft narrative voiceovers here, configure high-fidelity speakers, and generate production-ready audio."
-  );
-  const [selectedVoice, setSelectedVoice] = useState("sarah-pro");
-  const [speed, setSpeed] = useState(1.0);
+  const [text, setText] = useState("");
+  const [selectedVoice, setSelectedVoice] = useState("female");
+  const [rate, setRate] = useState(1.0);
   const [pitch, setPitch] = useState(1.0);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [copied, setCopied] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(true);
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
-  const voices = [
-    { id: "sarah-pro", name: "Sarah (Professional)", gender: "Female", style: "Corporate / Narration" },
-    { id: "david-news", name: "David (Energetic)", gender: "Male", style: "Broadcast / Promo" },
-    { id: "michael-calm", name: "Michael (Calm)", gender: "Male", style: "Instructional / E-Learning" },
-    { id: "emily-story", name: "Emily (Warm)", gender: "Female", style: "Audiobook / Storytelling" },
-  ];
+  // Check if Web Speech API is supported
+  useEffect(() => {
+    setSpeechSupported("speechSynthesis" in window);
+  }, []);
 
-  function handleGenerateAudio() {
-    setIsGenerating(true);
-    setAudioUrl(null);
+  // Auto-grow textarea
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+    }
+  }, [text]);
+
+  const handleSpeak = () => {
+    if (!text.trim() || !speechSupported) return;
+
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utteranceRef.current = utterance;
+
+    // Set voice based on selection
+    const voices = window.speechSynthesis.getVoices();
+    const selectedVoiceObj = voices.find((v) =>
+      selectedVoice === "male"
+        ? v.name.toLowerCase().includes("male") || v.name.toLowerCase().includes("david")
+        : selectedVoice === "female"
+        ? v.name.toLowerCase().includes("female") || v.name.toLowerCase().includes("zira") || v.name.toLowerCase().includes("samantha")
+        : v.name.toLowerCase().includes("child") || v.name.toLowerCase().includes("young")
+    );
+
+    if (selectedVoiceObj) {
+      utterance.voice = selectedVoiceObj;
+    }
+
+    utterance.rate = rate;
+    utterance.pitch = pitch;
+
+    utterance.onend = () => setIsPlaying(false);
+    utterance.onerror = () => {
+      setIsPlaying(false);
+    };
+
+    setIsPlaying(true);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const handleStop = () => {
+    window.speechSynthesis.cancel();
     setIsPlaying(false);
+  };
 
-    // Simulate audio generation latency
-    setTimeout(() => {
-      setIsGenerating(false);
-      // We set a mock audio URL (just a silence block or a standard sample URL if needed, but we can just use a dummy browser state)
-      setAudioUrl("generated-voice-sample");
-    }, 2000);
-  }
+  const handleDownload = () => {
+    if (!text.trim()) return;
+
+    // Create a simple audio file using Web Audio API
+    // For a real implementation, you'd use a service like OpenAI TTS
+    const blob = new Blob([text], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `voice-over-${Date.now()}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleQuickAction = (prompt: string) => {
+    setText(prompt);
+    setShowSuggestions(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSpeak();
+    }
+  };
 
   return (
     <AppShell>
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+      <div className="flex h-full flex-col">
         {/* Header */}
-        <section className="rounded-lg border border-border bg-card p-6 text-card-foreground shadow-sm">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <AudioLines className="size-5 text-muted-foreground" aria-hidden="true" />
-                <p className="text-sm font-medium text-muted-foreground">Audio Studio</p>
+        <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur">
+          <div className="flex h-16 items-center justify-between px-4 sm:px-6">
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+                <AudioLines className="size-5" />
               </div>
-              <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Voice Studio</h1>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Synthesize professional narration, perform voice cloning, and orchestrate audio assets.
-              </p>
-            </div>
-            {/* Tabs */}
-            <div className="flex rounded-lg border border-border bg-muted p-1">
-              <button
-                onClick={() => setActiveTab("tts")}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
-                  activeTab === "tts"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Text-to-Speech
-              </button>
-              <button
-                onClick={() => setActiveTab("clone")}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
-                  activeTab === "clone"
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                Voice Cloning
-              </button>
-            </div>
-          </div>
-        </section>
-
-        {activeTab === "tts" ? (
-          <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
-            {/* Main Narration Inputs */}
-            <section className="flex flex-col gap-5 rounded-lg border border-border bg-card p-5 text-card-foreground shadow-sm">
-              <div className="flex flex-col gap-2">
-                <label htmlFor="narration-text" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  Script to Synthesize
-                </label>
-                <textarea
-                  id="narration-text"
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  className="min-h-56 resize-none rounded-lg border border-input bg-background/50 px-4 py-3 text-sm leading-6 outline-none transition-colors focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
-                  placeholder="Enter narration script text here..."
-                />
-              </div>
-
-              {/* Speech Controls */}
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-2">
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Speed ({speed.toFixed(1)}x)
-                  </span>
-                  <input
-                    type="range"
-                    min="0.5"
-                    max="2.0"
-                    step="0.1"
-                    value={speed}
-                    onChange={(e) => setSpeed(parseFloat(e.target.value))}
-                    className="accent-primary h-2 rounded bg-muted outline-none cursor-pointer"
-                  />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    Pitch ({pitch.toFixed(1)}x)
-                  </span>
-                  <input
-                    type="range"
-                    min="0.5"
-                    max="1.5"
-                    step="0.1"
-                    value={pitch}
-                    onChange={(e) => setPitch(parseFloat(e.target.value))}
-                    className="accent-primary h-2 rounded bg-muted outline-none cursor-pointer"
-                  />
-                </div>
-              </div>
-
-              {/* Generate Trigger */}
-              <div className="flex items-center gap-4 border-t border-border pt-4">
-                <Button
-                  onClick={handleGenerateAudio}
-                  disabled={isGenerating || !text.trim()}
-                  className="w-full sm:w-auto"
-                >
-                  {isGenerating ? (
-                    <>
-                      <RefreshCw className="size-4 animate-spin" /> Synthesizing Voice...
-                    </>
-                  ) : (
-                    <>
-                      <Volume2 className="size-4" /> Generate Audio
-                    </>
-                  )}
-                </Button>
-                {isGenerating && (
-                  <span className="text-xs text-muted-foreground animate-pulse">
-                    Allocating server engine...
-                  </span>
-                )}
-              </div>
-
-              {/* Audio player card */}
-              {audioUrl && (
-                <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 flex flex-col gap-3 mt-2 animate-in fade-in-50 duration-300">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-primary uppercase tracking-wider flex items-center gap-1">
-                      <Sparkles className="size-3" /> Output Generated
-                    </span>
-                    <span className="text-xs text-muted-foreground">0:12</span>
-                  </div>
-
-                  <div className="flex items-center gap-4">
-                    <Button
-                      onClick={() => setIsPlaying(!isPlaying)}
-                      variant="default"
-                      size="icon"
-                      className="size-10"
-                    >
-                      {isPlaying ? <Pause className="size-5" /> : <Play className="size-5 pl-0.5" />}
-                    </Button>
-                    <div className="flex-1 flex items-end gap-1.5 h-6">
-                      {/* CSS Mock Waveform */}
-                      {[12, 18, 8, 24, 16, 28, 6, 20, 10, 24, 16, 22, 12, 8, 14, 20, 26, 12, 6, 18, 12, 10].map((h, i) => (
-                        <div
-                          key={i}
-                          className="flex-1 rounded-sm bg-primary/45 transition-all duration-300"
-                          style={{
-                            height: isPlaying ? `${h * 0.8}px` : "4px",
-                            animation: isPlaying ? `wave-animation 1s ease-in-out infinite alternate` : undefined,
-                            animationDelay: `${i * 0.05}s`,
-                          }}
-                        />
-                      ))}
-                    </div>
-                    <Button variant="ghost" size="icon" title="Download Audio">
-                      <Download className="size-4" />
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </section>
-
-            {/* Sidebar Voice Selector */}
-            <aside className="rounded-lg border border-border bg-card p-5 text-card-foreground shadow-sm flex flex-col gap-4">
               <div>
-                <h3 className="text-sm font-semibold">Select Narration Voice</h3>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Choose a model target optimized for speech style.
+                <h1 className="text-lg font-semibold">Voice Studio</h1>
+                <p className="text-xs text-muted-foreground">
+                  Text-to-speech using browser's native voice synthesis
                 </p>
               </div>
-
-              <div className="flex flex-col gap-2">
-                {voices.map((voice) => (
-                  <button
-                    key={voice.id}
-                    onClick={() => setSelectedVoice(voice.id)}
-                    className={`flex items-start justify-between rounded-lg border p-3 text-left transition-colors ${
-                      selectedVoice === voice.id
-                        ? "border-primary bg-primary/5"
-                        : "border-border bg-background hover:bg-accent/40"
-                    }`}
-                  >
-                    <div>
-                      <p className="text-xs font-semibold">{voice.name}</p>
-                      <p className="text-[10px] text-muted-foreground mt-1">{voice.style}</p>
-                    </div>
-                    <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground uppercase">
-                      {voice.gender}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </aside>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => (window.location.href = "/settings")}
+              aria-label="Settings"
+            >
+              <Settings className="size-4" />
+            </Button>
           </div>
-        ) : (
-          /* Voice Cloning Tab */
-          <section className="rounded-lg border border-border bg-card p-6 text-card-foreground shadow-sm max-w-3xl mx-auto w-full">
-            <h2 className="text-lg font-semibold tracking-tight">Clone Voice Profile</h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              Upload a clean, noise-free audio sample (10-30 seconds) to train a custom voice generator model.
-            </p>
+        </header>
 
-            <div className="mt-6 border-2 border-dashed border-border rounded-lg p-8 flex flex-col items-center justify-center text-center bg-muted/20">
-              <Upload className="size-8 text-muted-foreground mb-4" />
-              <p className="text-sm font-medium">Drag & drop your voice recording sample here</p>
-              <p className="text-xs text-muted-foreground mt-1">Supports WAV, MP3, or M4A up to 10MB</p>
-              <div className="mt-4 flex gap-2">
-                <Button size="sm">Choose File</Button>
-                <Button size="sm" variant="outline">
-                  <Mic className="size-4" /> Record Live
-                </Button>
+        {/* Main Content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
+            {showSuggestions && !text && (
+              // Hero Welcome Section
+              <div className="flex min-h-[calc(100vh-12rem)] flex-col items-center justify-center">
+                <div className="text-center mb-8">
+                  <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-xl bg-primary/10">
+                    <AudioLines className="size-8 text-primary" />
+                  </div>
+                  <h2 className="text-2xl font-bold tracking-tight mb-2">
+                    Voice Studio
+                  </h2>
+                  <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                    Convert text to natural speech using your browser's built-in voice synthesis. No API key required.
+                  </p>
+                </div>
+
+                <h3 className="text-lg font-semibold mb-4">
+                  Quick voice-over templates
+                </h3>
+
+                {/* Quick Actions Grid */}
+                <div className="grid w-full max-w-xl gap-2.5 sm:grid-cols-2">
+                  {QUICK_ACTIONS.map((action) => (
+                    <button
+                      key={action.label}
+                      onClick={() => handleQuickAction(action.prompt)}
+                      className="group flex flex-col items-start gap-2 rounded-lg border border-border bg-card p-3 text-left transition-all hover:shadow-md hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <div className="flex size-8 items-center justify-center rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary/20">
+                        <Sparkles className="size-4" />
+                      </div>
+                      <p className="text-xs leading-relaxed text-foreground">
+                        {action.label}
+                      </p>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
-            <div className="mt-6 border-t border-border pt-4">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Guidelines for high-fidelity voice cloning:
-              </h3>
-              <ul className="mt-3 list-disc pl-4 text-xs text-muted-foreground space-y-2">
-                <li>Read the provided script in a clear, consistent conversational tone.</li>
-                <li>Eliminate background noise (fans, hums, echoes) before recording.</li>
-                <li>Provide a voice profile that reflects the pacing and vocabulary of the intended output.</li>
-              </ul>
+            {!showSuggestions && (
+              // Chat-style Messages
+              <div className="space-y-8">
+                {text && (
+                  <div className="flex gap-4">
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
+                      <User className="size-4" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-base leading-relaxed text-foreground whitespace-pre-wrap">
+                        {text}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Composer */}
+        <footer className="border-t border-border bg-background/50 p-4 backdrop-blur sm:p-6">
+          <div className="mx-auto w-full max-w-3xl">
+            <div className="relative">
+              <div className="rounded-2xl border border-border bg-card shadow-lg transition-all focus-within:shadow-xl">
+                <textarea
+                  ref={textareaRef}
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Enter text to convert to speech... e.g. Welcome to AI Studio, your creative workspace"
+                  className="w-full resize-none rounded-2xl border-0 bg-transparent px-4 py-3 pr-24 text-base outline-none placeholder:text-muted-foreground min-h-20 max-h-48"
+                  disabled={isGenerating}
+                  rows={1}
+                />
+                <div className="absolute bottom-2 right-2 flex items-center gap-1">
+                  <Button
+                    size="icon"
+                    onClick={isPlaying ? handleStop : handleSpeak}
+                    disabled={!text.trim() || !speechSupported}
+                    className="rounded-xl"
+                  >
+                    {isPlaying ? (
+                      <Pause className="size-4" />
+                    ) : (
+                      <Play className="size-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {speechSupported
+                  ? "Press Enter to speak, Shift+Enter for new line"
+                  : "Web Speech API not supported in this browser"}
+              </p>
             </div>
-          </section>
-        )}
+          </div>
+        </footer>
       </div>
     </AppShell>
   );

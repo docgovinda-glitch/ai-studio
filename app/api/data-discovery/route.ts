@@ -57,7 +57,7 @@ Return strictly valid JSON in this format:
     ];
 
     const apiKeys: Record<string, string> = {};
-    const provider = aiSettings?.provider || "gemini";
+    const provider = aiSettings?.provider || "mock";
     
     if (aiSettings?.geminiApiKey) apiKeys.gemini = aiSettings.geminiApiKey;
     if (aiSettings?.openaiApiKey) apiKeys.openai = aiSettings.openaiApiKey;

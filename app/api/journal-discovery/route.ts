@@ -60,7 +60,7 @@ Generate a shortlist of exactly 3 to 4 reputable journals. Return strictly valid
     ];
 
     const apiKeys: Record<string, string> = {};
-    const provider = aiSettings?.provider || "gemini";
+    const provider = aiSettings?.provider || "mock";
     
     if (aiSettings?.geminiApiKey) apiKeys.gemini = aiSettings.geminiApiKey;
     if (aiSettings?.openaiApiKey) apiKeys.openai = aiSettings.openaiApiKey;

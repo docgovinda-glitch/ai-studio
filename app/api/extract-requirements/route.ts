@@ -47,7 +47,7 @@ Produce a high-fidelity checklists and internal compliance guidelines in JSON fo
     ];
 
     const apiKeys: Record<string, string> = {};
-    const provider = aiSettings?.provider || "gemini";
+    const provider = aiSettings?.provider || "mock";
     
     if (aiSettings?.geminiApiKey) apiKeys.gemini = aiSettings.geminiApiKey;
     if (aiSettings?.openaiApiKey) apiKeys.openai = aiSettings.openaiApiKey;

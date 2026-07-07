@@ -13,6 +13,7 @@ type ChatRequestBody = {
   model?: unknown;
   providerId?: unknown;
   apiKeys?: unknown;
+  stream?: unknown;
 };
 
 export async function POST(request: Request) {
@@ -41,6 +42,35 @@ export async function POST(request: Request) {
     }
 
     const kernel = createAiKernel();
+    const shouldStream = body.stream === true;
+
+    if (shouldStream) {
+      // Handle streaming response
+      const stream = await kernel.generateTextStream({
+        providerId,
+        model,
+        messages,
+        apiKeys,
+      });
+
+      // Transform the stream to SSE format
+      const transformStream = new TransformStream({
+        transform(chunk, controller) {
+          const text = new TextDecoder().decode(chunk);
+          controller.enqueue(new TextEncoder().encode(text));
+        }
+      });
+
+      const readableStream = stream.pipeThrough(transformStream);
+
+      return new Response(readableStream, {
+        headers: {
+          "Content-Type": "text/plain",
+          "Cache-Control": "no-cache",
+          "Connection": "keep-alive",
+        },
+      });
+    }
 
     const response = await kernel.generateText({
       providerId,

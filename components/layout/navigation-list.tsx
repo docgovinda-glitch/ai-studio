@@ -10,6 +10,7 @@ import {
   Settings,
   ShieldCheck,
   Image as ImageIcon,
+  BookText,
   type LucideIcon,
 } from "lucide-react";
 import { NavigationLink } from "@/components/layout/navigation-link";
@@ -21,6 +22,7 @@ type NavigationListProps = {
 export function NavigationList({ variant }: NavigationListProps) {
   const navigationItems: { title: string; href: string; icon: LucideIcon; isAdminOnly?: boolean }[] = [
     { title: "AI Chat", href: "/chat", icon: Bot },
+    { title: "Journal Studio", href: "/journal-assistant", icon: BookText },
     { title: "Writing Studio", href: "/writing", icon: PenLine },
     { title: "Image Studio", href: "/images", icon: ImageIcon },
     { title: "Voice Studio", href: "/voice", icon: AudioLines },

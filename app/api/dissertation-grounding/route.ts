@@ -77,7 +77,7 @@ Generate a comprehensive "Dissertation Grounding Map" in JSON format. Ensure all
 
     // Build apiKeys object
     const apiKeys: Record<string, string> = {};
-    const provider = aiSettings?.provider || "gemini";
+    const provider = aiSettings?.provider || "mock";
     
     if (aiSettings?.geminiApiKey) apiKeys.gemini = aiSettings.geminiApiKey;
     if (aiSettings?.openaiApiKey) apiKeys.openai = aiSettings.openaiApiKey;

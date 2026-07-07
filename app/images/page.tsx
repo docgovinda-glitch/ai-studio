@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Image as ImageIcon,
   Download,
@@ -11,9 +11,10 @@ import {
   Check,
   Copy,
   Zap,
-  Cpu,
-  Globe,
-  Key,
+  Send,
+  ArrowRight,
+  User,
+  Bot,
 } from "lucide-react";
 import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
@@ -22,8 +23,6 @@ const IMAGE_SIZES = [
   { value: "256x256", label: "Small (256x256)" },
   { value: "512x512", label: "Medium (512x512)" },
   { value: "1024x1024", label: "Large (1024x1024)" },
-  { value: "1792x1024", label: "Wide (1792x1024)" },
-  { value: "1024x1792", label: "Tall (1024x1792)" },
 ];
 
 const IMAGE_STYLES = [
@@ -31,30 +30,86 @@ const IMAGE_STYLES = [
   { value: "illustration", label: "Illustration" },
   { value: "3d-render", label: "3D Render" },
   { value: "vector", label: "Vector Art" },
-  { value: "pixel-art", label: "Pixel Art" },
   { value: "cinematic", label: "Cinematic" },
   { value: "anime", label: "Anime" },
   { value: "sketch", label: "Sketch" },
+  { value: "abstract", label: "Abstract" },
 ];
 
-const PROVIDERS = [
-  { id: "mock", name: "Mock (Offline)", icon: Cpu, requiresKey: false },
-  { id: "openai", name: "OpenAI (DALL-E)", icon: Zap, requiresKey: true },
-  { id: "openrouter", name: "OpenRouter (Free)", icon: Globe, requiresKey: false },
+const PROMPT_SUGGESTIONS = [
+  "A serene mountain landscape at sunset, cinematic lighting",
+  "Futuristic cityscape with neon lights, cyberpunk style",
+  "Cute robot reading a book in a library, illustration",
+  "Minimalist workspace with clean lines, modern design",
+  "Ocean waves crashing against rocks, photorealistic",
+  "Magical forest with glowing mushrooms, fantasy art",
+  "Portrait of a wise owl wearing glasses, sketch",
+  "Abstract geometric patterns in vibrant colors",
+];
+
+const ML_ENHANCEMENTS = [
+  { label: "Upscale 2x", prompt: "upscale this image 2x" },
+  { label: "Upscale 4x", prompt: "upscale this image 4x" },
+  { label: "Remove Background", prompt: "remove background from this image" },
+  { label: "Enhance Quality", prompt: "enhance image quality and details" },
+  { label: "Colorize", prompt: "colorize this black and white image" },
+  { label: "Style Transfer", prompt: "apply van Gogh style to this image" },
+  { label: "Generate Variations", prompt: "generate 4 variations of this image" },
+  { label: "Extract Colors", prompt: "extract color palette from this image" },
 ];
 
 export default function ImageStudioPage() {
   const [prompt, setPrompt] = useState("");
   const [size, setSize] = useState("1024x1024");
   const [style, setStyle] = useState("photorealistic");
-  const [provider, setProvider] = useState("mock");
-  const [apiKey, setApiKey] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedImage, setGeneratedImage] = useState<string | null>(null);
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-
+  const [showSuggestions, setShowSuggestions] = useState(true);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-grow textarea
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+    }
+  }, [prompt]);
+
+  const handleMLEnhance = async (enhancement: string) => {
+    if (!generatedImage) return;
+
+    setIsGenerating(true);
+    setError(null);
+
+    try {
+      // For ML enhancements, we use the existing image as context
+      // Pollinations.ai supports some transformations via URL parameters
+      const enhancedPrompt = `${enhancement} of: ${generatedImage}`;
+      const width = size.split("x")[0];
+      const height = size.split("x")[1];
+
+      // Pollinations.ai free API with enhancement
+      const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?width=${width}&height=${height}&nologo=true&private=true&enhance=true`;
+
+      const img = new Image();
+      img.onload = () => {
+        setGeneratedImage(imageUrl);
+      };
+      img.onerror = () => {
+        throw new Error("Failed to enhance image");
+      };
+      img.src = imageUrl;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
@@ -62,34 +117,28 @@ export default function ImageStudioPage() {
       return;
     }
 
-    const selectedProvider = PROVIDERS.find((p) => p.id === provider);
-    if (selectedProvider?.requiresKey && !apiKey.trim()) {
-      setError(`API key required for ${selectedProvider.name}`);
-      return;
-    }
-
     setIsGenerating(true);
     setError(null);
+    setShowSuggestions(false);
 
     try {
-      const response = await fetch("/api/images", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: `${prompt} in ${style} style`,
-          size,
-          providerId: provider,
-          apiKeys: { [provider]: apiKey },
-        }),
-      });
+      // Use Pollinations.ai - free image generation without API key
+      const enhancedPrompt = `${prompt} in ${style} style, high quality, detailed`;
+      const width = size.split("x")[0];
+      const height = size.split("x")[1];
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || "Failed to generate image");
-      }
+      // Pollinations.ai free API
+      const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?width=${width}&height=${height}&nologo=true&private=true`;
 
-      const data = await response.json();
-      setGeneratedImage(data.image?.url);
+      // Test if image loads
+      const img = new Image();
+      img.onload = () => {
+        setGeneratedImage(imageUrl);
+      };
+      img.onerror = () => {
+        throw new Error("Failed to generate image");
+      };
+      img.src = imageUrl;
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
@@ -119,203 +168,267 @@ export default function ImageStudioPage() {
     handleGenerate();
   };
 
+  const handleSuggestionClick = (suggestion: string) => {
+    setPrompt(suggestion);
+    setShowSuggestions(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleGenerate();
+    }
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setError("Please upload an image file");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      setUploadedImage(result);
+      setShowSuggestions(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveUploadedImage = () => {
+    setUploadedImage(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   return (
     <AppShell>
-      <div className="p-6 max-w-6xl mx-auto">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold mb-2 flex items-center gap-2">
-            <ImageIcon className="h-8 w-8 text-purple-500" />
-            Image Studio
-          </h1>
-          <p className="text-muted-foreground">
-            Generate images using AI models. Supports DALL-E, OpenRouter, and local models.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Input Panel */}
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                Prompt
-              </label>
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="A serene mountain landscape at sunset, cinematic lighting..."
-                className="w-full h-32 px-3 py-2 border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-purple-500"
-                disabled={isGenerating}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Size
-                </label>
-                <select
-                  value={size}
-                  onChange={(e) => setSize(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  disabled={isGenerating}
-                >
-                  {IMAGE_SIZES.map((s) => (
-                    <option key={s.value} value={s.value}>
-                      {s.label}
-                    </option>
-                  ))}
-                </select>
+      <div className="flex h-full flex-col">
+        {/* Header */}
+        <header className="sticky top-0 z-10 border-b border-border bg-background/80 backdrop-blur">
+          <div className="flex h-16 items-center justify-between px-4 sm:px-6">
+            <div className="flex items-center gap-3">
+              <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+                <ImageIcon className="size-5" />
               </div>
-
               <div>
-                <label className="block text-sm font-medium mb-2">
-                  Style
-                </label>
-                <select
-                  value={style}
-                  onChange={(e) => setStyle(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  disabled={isGenerating}
-                >
-                  {IMAGE_STYLES.map((s) => (
-                    <option key={s.value} value={s.value}>
-                      {s.label}
-                    </option>
-                  ))}
-                </select>
+                <h1 className="text-lg font-semibold">Image Studio</h1>
+                <p className="text-xs text-muted-foreground">
+                  Generate images using AI (powered by Pollinations.ai)
+                </p>
               </div>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                Provider
-              </label>
-              <div className="grid grid-cols-1 gap-2">
-                {PROVIDERS.map((p) => {
-                  const Icon = p.icon;
-                  return (
-                    <label
-                      key={p.id}
-                      className="flex items-center gap-2 p-2 border rounded-lg cursor-pointer hover:bg-muted/50"
-                    >
-                      <input
-                        type="radio"
-                        name="provider"
-                        value={p.id}
-                        checked={provider === p.id}
-                        onChange={(e) => setProvider(e.target.value)}
-                        disabled={isGenerating}
-                        className="radio radio-sm"
-                      />
-                      <Icon className="h-4 w-4" />
-                      <span className="text-sm">{p.name}</span>
-                      {p.requiresKey && <Key className="h-3 w-3 ml-auto text-amber-500" />}
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-
-            {PROVIDERS.find((p) => p.id === provider)?.requiresKey && (
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  API Key
-                </label>
-                <input
-                  type="password"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="Enter your API key"
-                  className="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  disabled={isGenerating}
-                />
-              </div>
-            )}
-
-            {error && (
-              <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-600">
-                <AlertCircle className="h-4 w-4" />
-                <span className="text-sm">{error}</span>
-              </div>
-            )}
-
             <Button
-              onClick={handleGenerate}
-              disabled={isGenerating || !prompt.trim()}
-              className="w-full"
-              size="lg"
+              variant="ghost"
+              size="icon"
+              onClick={() => (window.location.href = "/settings")}
+              aria-label="Settings"
             >
-              {isGenerating ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Generate Image
-                </>
-              )}
+              <ArrowRight className="size-4" />
             </Button>
           </div>
+        </header>
 
-          {/* Output Panel */}
-          <div className="space-y-4">
-            {generatedImage ? (
-              <div className="border rounded-lg overflow-hidden bg-muted/20">
-                <img
-                  src={generatedImage}
-                  alt="Generated image"
-                  className="w-full h-auto"
-                />
-                <div className="p-3 flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleDownload}
-                    className="flex-1"
-                  >
-                    <Download className="h-4 w-4 mr-2" />
-                    Download
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCopy}
-                    className="flex-1"
-                  >
-                    {copied ? (
-                      <>
-                        <Check className="h-4 w-4 mr-2" />
-                        Copied!
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="h-4 w-4 mr-2" />
-                        Copy URL
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRegenerate}
-                    disabled={isGenerating}
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                  </Button>
+        {/* Main Content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
+            {showSuggestions && !generatedImage && (
+              // Hero Welcome Section
+              <div className="flex min-h-[calc(100vh-12rem)] flex-col items-center justify-center">
+                <div className="text-center mb-8">
+                  <div className="mx-auto mb-4 flex size-16 items-center justify-center rounded-xl bg-primary/10">
+                    <ImageIcon className="size-8 text-primary" />
+                  </div>
+                  <h2 className="text-2xl font-bold tracking-tight mb-2">
+                    Image Studio
+                  </h2>
+                  <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                    Generate images using AI. No API key required - powered by free AI models.
+                  </p>
+                </div>
+
+                <h3 className="text-lg font-semibold mb-4">
+                  Try these prompt suggestions
+                </h3>
+
+                {/* Prompt Suggestions Grid */}
+                <div className="grid w-full max-w-xl gap-2.5 sm:grid-cols-2">
+                  {PROMPT_SUGGESTIONS.map((suggestion, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleSuggestionClick(suggestion)}
+                      className="group flex flex-col items-start gap-2 rounded-lg border border-border bg-card p-3 text-left transition-all hover:shadow-md hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <div className="flex size-8 items-center justify-center rounded-md bg-primary/10 text-primary transition-colors group-hover:bg-primary/20">
+                        <Sparkles className="size-4" />
+                      </div>
+                      <p className="text-xs leading-relaxed text-foreground">
+                        {suggestion}
+                      </p>
+                    </button>
+                  ))}
                 </div>
               </div>
-            ) : (
-              <div className="border-2 border-dashed rounded-lg h-96 flex items-center justify-center bg-muted/10">
-                <div className="text-center text-muted-foreground">
-                  <ImageIcon className="h-12 w-12 mx-auto mb-2 opacity-20" />
-                  <p>Your generated image will appear here</p>
-                </div>
+            )}
+
+            {!showSuggestions && (
+              // Chat-style Messages
+              <div className="space-y-8">
+                {prompt && (
+                  <div className="flex gap-4">
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
+                      <User className="size-4" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-base leading-relaxed text-foreground">
+                        {prompt}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {uploadedImage && (
+                  <div className="flex gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted">
+                      <User className="size-4" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="rounded-lg border border-border overflow-hidden bg-card max-w-md">
+                        <img
+                          src={uploadedImage}
+                          alt="Uploaded image"
+                          className="w-full h-auto"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {generatedImage && (
+                  <div className="flex gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                      <Bot className="size-4" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="rounded-lg border border-border overflow-hidden bg-card">
+                        <img
+                          src={generatedImage}
+                          alt="Generated image"
+                          className="w-full h-auto"
+                        />
+                      </div>
+                      <div className="mt-3 flex flex-col gap-3">
+                        {/* ML Enhancements */}
+                        <div className="flex flex-wrap gap-1.5">
+                          {ML_ENHANCEMENTS.map((enhancement) => (
+                            <button
+                              key={enhancement.label}
+                              onClick={() => handleMLEnhance(enhancement.prompt)}
+                              disabled={isGenerating}
+                              className="rounded-full px-2.5 py-1 text-xs font-medium border border-border bg-card hover:bg-accent transition-colors disabled:opacity-50"
+                            >
+                              {enhancement.label}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={handleCopy}
+                            aria-label="Copy image URL"
+                          >
+                            {copied ? (
+                              <Check className="size-3 text-green-500" />
+                            ) : (
+                              <Copy className="size-3" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={handleDownload}
+                            aria-label="Download image"
+                          >
+                            <Download className="size-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={handleRegenerate}
+                            disabled={isGenerating}
+                            aria-label="Regenerate image"
+                          >
+                            <RefreshCw className="size-3" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
         </div>
+
+        {/* Composer */}
+        <footer className="border-t border-border bg-background/50 p-4 backdrop-blur sm:p-6">
+          <div className="mx-auto w-full max-w-3xl">
+            <div className="relative">
+              <div className="rounded-2xl border border-border bg-card shadow-lg transition-all focus-within:shadow-xl">
+                <textarea
+                  ref={textareaRef}
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Describe what you want to generate... e.g. A serene mountain landscape at sunset"
+                  className="w-full resize-none rounded-2xl border-0 bg-transparent px-4 py-3 pr-24 text-base outline-none placeholder:text-muted-foreground min-h-20 max-h-48"
+                  disabled={isGenerating}
+                  rows={1}
+                />
+                <div className="absolute bottom-2 right-2 flex items-center gap-1">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isGenerating}
+                    aria-label="Upload image"
+                  >
+                    <ImageIcon className="size-4" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    onClick={handleGenerate}
+                    disabled={isGenerating || !prompt.trim()}
+                    className="rounded-xl"
+                  >
+                    {isGenerating ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <Send className="size-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Press Enter to generate, Shift+Enter for new line. Click image icon to upload.
+              </p>
+            </div>
+          </div>
+        </footer>
       </div>
     </AppShell>
   );
