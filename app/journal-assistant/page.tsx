@@ -1,49 +1,131 @@
-import { AppShell } from "@/components/layout/app-shell";
+"use client";
 
-export const metadata = {
-  title: "Journal Assistant | Everest AI Assistant",
-  description: "Run the journal assistant experience inside AI Studio.",
+import { useState, useEffect } from "react";
+import { AppShell } from "@/components/layout/app-shell";
+import { 
+  PaperProject, 
+  GroundingMap, 
+  DiscoveredDataSource, 
+  RecommendJournal, 
+  ComplianceRules, 
+  QCReport,
+  SubmissionPack,
+  AISettings,
+  WORKFLOW_PHASES
+} from "@/lib/journal-types";
+import ResearchIntakeWizard from "@/components/journal/ResearchIntakeWizard";
+import GroundingMapDisplay from "@/components/journal/GroundingMapDisplay";
+import DataDiscoveryPanel from "@/components/journal/DataDiscoveryPanel";
+import JournalDiscoveryPanel from "@/components/journal/JournalDiscoveryPanel";
+import ComplianceChecklistPanel from "@/components/journal/ComplianceChecklistPanel";
+import ManuscriptDraftingWorkspace from "@/components/journal/ManuscriptDraftingWorkspace";
+import QualityControlSuite from "@/components/journal/QualityControlSuite";
+import SubmissionPackagingSuite from "@/components/journal/SubmissionPackagingSuite";
+
+// Default state
+const DEFAULT_STATE: PaperProject = {
+  id: `project-${Date.now()}`,
+  title: "",
+  objectives: "",
+  researchQuestions: "",
+  researchGap: "",
+  methodology: "",
+  field: "",
+  keywords: "",
+  preferredJournalScope: "",
+  articleType: "",
+  dissertationMaterials: "",
+  styleAspiration: "",
+  authorDetails: "",
+  currentPhase: "A",
+  aiSettings: { provider: "gemini" },
+  sections: {},
 };
 
 export default function JournalAssistantPage() {
-  // Best-effort: embed the Vite app served from journal-assistant.
-  // If your deployment differs, update the iframe src.
-  const iframeSrc =
-    process.env.NEXT_PUBLIC_JOURNAL_ASSISTANT_URL ?? "http://localhost:5173";
+  const [project, setProject] = useState<PaperProject>(DEFAULT_STATE);
+  const [loading, setLoading] = useState(false);
+
+  // Load saved state from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("journal-assistant-state");
+    if (saved) {
+      try {
+        setProject(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to parse saved state:", e);
+      }
+    }
+  }, []);
+
+  // Save state to localStorage
+  useEffect(() => {
+    localStorage.setItem("journal-assistant-state", JSON.stringify(project));
+  }, [project]);
+
+  const updateProject = (fields: Partial<PaperProject>) => {
+    setProject(prev => ({ ...prev, ...fields }));
+  };
+
+  const goToPhase = (phase: string) => {
+    updateProject({ currentPhase: phase as PaperProject["currentPhase"] });
+  };
+
+  const renderPhase = () => {
+    switch (project.currentPhase) {
+      case "A":
+        return <ResearchIntakeWizard project={project} updateProject={updateProject} onNext={() => goToPhase("B")} />;
+      case "B":
+        return <GroundingMapDisplay project={project} updateProject={updateProject} onNext={() => goToPhase("C")} onBack={() => goToPhase("A")} />;
+      case "C":
+        return <DataDiscoveryPanel project={project} updateProject={updateProject} onNext={() => goToPhase("D")} onBack={() => goToPhase("B")} />;
+      case "D":
+        return <JournalDiscoveryPanel project={project} updateProject={updateProject} onNext={() => goToPhase("E")} onBack={() => goToPhase("C")} />;
+      case "E":
+        return <ComplianceChecklistPanel project={project} updateProject={updateProject} onNext={() => goToPhase("F")} onBack={() => goToPhase("D")} />;
+      case "F":
+        return <ManuscriptDraftingWorkspace project={project} updateProject={updateProject} onNext={() => goToPhase("G")} onBack={() => goToPhase("E")} />;
+      case "G":
+        return <QualityControlSuite project={project} updateProject={updateProject} onNext={() => goToPhase("H")} onBack={() => goToPhase("F")} />;
+      case "H":
+        return <SubmissionPackagingSuite project={project} updateProject={updateProject} onNext={() => goToPhase("I")} onBack={() => goToPhase("G")} />;
+      case "I":
+        return (
+          <div className="p-8 text-center">
+            <h2 className="text-xl font-semibold mb-4">Submission Support</h2>
+            <p className="text-gray-600">Track your submission status and receive support for portal interactions.</p>
+          </div>
+        );
+      default:
+        return <ResearchIntakeWizard project={project} updateProject={updateProject} onNext={() => goToPhase("B")} />;
+    }
+  };
 
   return (
     <AppShell>
-      <div className="w-full">
-        <div className="mb-4 rounded-xl border border-border/60 bg-background/60 p-4">
-          <h1 className="text-lg font-semibold">Journal Assistant</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Research, draft, and refine using the journal assistant experience.
-          </p>
-          <div className="mt-3 text-xs text-muted-foreground flex items-center gap-2">
-            <span className="inline-flex items-center rounded-full border border-border/60 bg-background/50 px-2 py-0.5">
-              Embedded UI
-            </span>
-            <span className="truncate">{iframeSrc}</span>
-          </div>
+      <div className="max-w-6xl mx-auto p-4">
+        {/* Phase Navigation */}
+        <div className="mb-6 flex flex-wrap gap-2 justify-center">
+          {WORKFLOW_PHASES.map((phase) => (
+            <button
+              key={phase.id}
+              onClick={() => goToPhase(phase.id)}
+              className={`px-3 py-1.5 text-xs font-mono rounded-lg transition-all ${
+                project.currentPhase === phase.id
+                  ? "bg-[#1A365D] text-white"
+                  : "bg-white border border-[#E2E8F0] text-[#1A365D] hover:bg-[#FAF9F6]"
+              }`}
+            >
+              {phase.id}. {phase.name}
+            </button>
+          ))}
         </div>
 
-        <div className="relative rounded-xl border border-border/60 bg-background/60 overflow-hidden">
-          <div className="absolute inset-x-0 top-0 z-10 h-10 bg-gradient-to-b from-background/90 to-transparent pointer-events-none" />
-          <iframe
-            title="Journal Assistant"
-            src={iframeSrc}
-            className="w-full h-[calc(100vh-16.5rem)] sm:h-[calc(100vh-12.5rem)]"
-            style={{ border: 0 }}
-            referrerPolicy="no-referrer"
-            loading="lazy"
-          />
+        {/* Phase Content */}
+        <div className="bg-white border border-[#E2E8F0] rounded-xl p-6">
+          {renderPhase()}
         </div>
-
-        <p className="mt-4 text-xs text-muted-foreground">
-          Tip: If the embedded app doesn’t load, set <span className="font-mono">NEXT_PUBLIC_JOURNAL_ASSISTANT_URL</span>.
-        </p>
       </div>
     </AppShell>
   );
 }
-

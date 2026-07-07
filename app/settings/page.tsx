@@ -1163,22 +1163,32 @@ export default function SettingsPage() {
                         )}
                       </div>
 
-                      <form onSubmit={handleSendFaq} className="flex gap-2 border-t border-border/40 pt-2">
+                      <div className="flex gap-2 border-t border-border/40 pt-2">
                         <input
                           type="text"
                           value={faqInput}
                           onChange={(e) => setFaqInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleSendFaq();
+                            }
+                          }}
                           placeholder="Ask about setup, ports, model recommendations..."
                           className="flex-1 h-9 rounded-lg border border-input bg-background px-3 text-xs outline-none focus:border-primary"
                         />
                         <button
-                          type="submit"
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleSendFaq();
+                          }}
                           disabled={faqLoading || !faqInput.trim()}
                           className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/95 disabled:opacity-50 transition-all hover:scale-[1.02]"
                         >
                           <Send className="size-3.5" />
                         </button>
-                      </form>
+                      </div>
                     </div>
 
                     {/* Quick suggestion tools and chip references span 1 column */}
