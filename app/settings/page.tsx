@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Settings, Save, Cpu, Globe, Key, ShieldCheck, Check, Sparkles, MessageSquare, Send, Bot, User, Loader2, Camera } from "lucide-react";
 
 import { AppShell } from "@/components/layout/app-shell";
@@ -65,6 +66,63 @@ const OLLAMA_MODELS = [
 
 export default function SettingsPage() {
   const [provider, setProvider] = useState("ollama");
+  const router = useRouter();
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [isVerified, setIsVerified] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setIsVerified(localStorage.getItem("ai_setting_verified") === "true");
+    }
+  }, []);
+
+  const handleTestConnection = async () => {
+    setTestingConnection(true);
+    setTestResult(null);
+    try {
+      const testModel = 
+        provider === "ollama" ? ollamaModel :
+        provider === "openai" ? openaiModel :
+        provider === "anthropic" ? anthropicModel :
+        provider === "gemini" ? geminiModel :
+        provider === "groq" ? groqModel :
+        provider === "openrouter" ? openrouterModel : "auto";
+      
+      const testKey = 
+        provider === "openai" ? openaiKey :
+        provider === "anthropic" ? anthropicKey :
+        provider === "gemini" ? geminiKey :
+        provider === "groq" ? groqKey :
+        provider === "openrouter" ? openrouterKey : "";
+
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: [{ role: "user", content: "Test ping connection. Respond with exactly 'pong' if working." }],
+          stream: false,
+          providerId: provider,
+          model: testModel,
+          apiKeys: { [provider]: testKey },
+          ollamaUrl: provider === "ollama" ? ollamaUrl : undefined
+        })
+      });
+
+      const data = await response.json();
+      if (response.ok && data.message && data.message.content) {
+        setTestResult({ success: true, message: `Successfully connected to ${provider}! AI response validated.` });
+        localStorage.setItem("ai_setting_verified", "true");
+        setIsVerified(true);
+      } else {
+        setTestResult({ success: false, message: `Failed connection: ${data.error?.message || "Unknown response error status."}` });
+      }
+    } catch (err: any) {
+      setTestResult({ success: false, message: `Network/connection error: ${err.message || "Failed to reach inference kernel."}` });
+    } finally {
+      setTestingConnection(false);
+    }
+  };
   
   // Specs Calculator
   const [ram, setRam] = useState("16");
@@ -531,9 +589,9 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
+        <div className="w-full">
           {/* Main Settings Form */}
-          <section className="rounded-lg glass-card glow-hover p-5 text-card-foreground shadow-lg">
+          <section className="w-full">
             {/* Navigation Tabs */}
             <div className="flex border-b border-border/40 gap-4 mb-5">
               <button
@@ -557,612 +615,590 @@ export default function SettingsPage() {
             </div>
 
             {activeSettingsTab === "ai" ? (
-              <form onSubmit={handleSaveSettings} className="space-y-6">
-              
-              {/* Provider Selection divided into Tiers */}
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-sm font-semibold border-b border-border pb-2 flex items-center gap-2">
-                    <Cpu className="size-4 text-primary" /> Active AI Routing Options
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
-                    Select how you want to route your workspace queries. Toggle between keyless free models, personal cloud API keys, or completely offline local engines.
-                  </p>
-                </div>
-
-                {/* Option 1: Free AI */}
-                <div className="space-y-3 rounded-lg border border-border/40 bg-muted/10 p-4 relative overflow-hidden">
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="inline-flex size-2 rounded-full bg-cyan-400 animate-pulse" />
-                      <span className="text-xs font-bold uppercase tracking-wider text-cyan-400">Option 1: Free Cloud AI (Zero Configuration)</span>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground leading-normal">
-                      Zero configurations required. Automatically selects and rotates through 15+ online models (e.g. Qwen for code, Hermes for logic) to bypass rate limits.
-                    </p>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div
-                      onClick={() => {
-                        setProvider("openrouter");
-                        setOpenrouterModel("auto");
-                      }}
-                      className={`rounded-lg border p-4 cursor-pointer transition-colors relative flex flex-col justify-between h-28 ${
-                        provider === "openrouter" && openrouterModel === "auto" ? "border-primary bg-primary/5" : "border-border bg-background hover:bg-accent/40"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <svg className="size-5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="12" r="3" />
-                          <circle cx="19" cy="5" r="2" />
-                          <circle cx="5" cy="19" r="2" />
-                          <circle cx="5" cy="5" r="2" />
-                          <circle cx="19" cy="19" r="2" />
-                          <line x1="17.6" y1="6.4" x2="13.4" y2="10.6" />
-                          <line x1="6.4" y1="17.6" x2="10.6" y2="13.4" />
-                          <line x1="6.4" y1="6.4" x2="10.6" y2="10.6" />
-                          <line x1="17.6" y1="17.6" x2="13.4" y2="13.4" />
-                        </svg>
-                        {provider === "openrouter" && openrouterModel === "auto" && <ShieldCheck className="text-primary size-4" />}
-                      </div>
-                      <div className="mt-1">
-                        <p className="text-xs font-semibold text-foreground">Autoselect Free AI</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">Task-driven auto-failover pool.</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="rounded border border-border/30 bg-background/40 p-2.5 text-[10px] text-muted-foreground leading-normal">
-                    💡 <strong>No Setup Required:</strong> This option is instant and plug-and-play. No credentials, tokens, or local installations are required to begin chatting.
-                  </div>
-                </div>
-
-                {/* Option 2: Paid API */}
-                <div className="space-y-3 rounded-lg border border-border/40 bg-muted/10 p-4 relative overflow-hidden">
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="inline-flex size-2 rounded-full bg-emerald-500" />
-                      <span className="text-xs font-bold uppercase tracking-wider text-emerald-500">Option 2: Personal API Keys (Bring Your Own Key)</span>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground leading-normal">
-                      Connect directly to flagship commercial endpoints. Keys are stored locally in your browser state and never touch external servers.
-                    </p>
-                  </div>
-                  <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
-                    {/* OpenAI */}
-                    <div
-                      onClick={() => setProvider("openai")}
-                      className={`rounded-lg border p-4 cursor-pointer transition-colors relative flex flex-col justify-between h-28 ${
-                        provider === "openai" ? "border-primary bg-primary/5" : "border-border bg-background hover:bg-accent/40"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <svg className="size-5 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M4.5 16.5c-1.5-2.5-.5-5.5 2-7s5.5-.5 7 2" />
-                          <path d="M8 20c-3 0-5.5-2.5-5.5-5.5S5 9 8 9" />
-                          <path d="M16.5 19.5c-2.5 1.5-5.5.5-7-2s-.5-5.5 2-7" />
-                          <path d="M20 16c0 3-2.5 5.5-5.5 5.5S9 19 9 16" />
-                          <path d="M19.5 7.5c1.5 2.5.5 5.5-2 7s-5.5.5-7-2" />
-                          <path d="M16 4c3 0 5.5 2.5 5.5 5.5S19 15 16 15" />
-                        </svg>
-                        {provider === "openai" && <ShieldCheck className="text-primary size-4" />}
-                      </div>
-                      <div className="mt-1">
-                        <p className="text-xs font-semibold text-foreground">OpenAI</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">GPT-4o series models.</p>
-                      </div>
-                    </div>
-
-                    {/* Anthropic */}
-                    <div
-                      onClick={() => setProvider("anthropic")}
-                      className={`rounded-lg border p-4 cursor-pointer transition-colors relative flex flex-col justify-between h-28 ${
-                        provider === "anthropic" ? "border-primary bg-primary/5" : "border-border bg-background hover:bg-accent/40"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <svg className="size-5 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" />
-                          <path d="M8 16.2L11 9L13 13.5H9" />
-                          <path d="M16 16.2V11.2C16 10 15 9 13.8 9C12.5 9 12 11.2 12 11.2" />
-                        </svg>
-                        {provider === "anthropic" && <ShieldCheck className="text-primary size-4" />}
-                      </div>
-                      <div className="mt-1">
-                        <p className="text-xs font-semibold text-foreground">Anthropic</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">Claude Claude models.</p>
-                      </div>
-                    </div>
-
-                    {/* Gemini */}
-                    <div
-                      onClick={() => setProvider("gemini")}
-                      className={`rounded-lg border p-4 cursor-pointer transition-colors relative flex flex-col justify-between h-28 ${
-                        provider === "gemini" ? "border-primary bg-primary/5" : "border-border bg-background hover:bg-accent/40"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <svg className="size-5 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M12 3v18" />
-                          <path d="M3 12h18" />
-                          <path d="M12 12L3 3" />
-                          <path d="M12 12l9 9" />
-                          <path d="M12 12l9-9" />
-                          <path d="M12 12l-9 9" />
-                        </svg>
-                        {provider === "gemini" && <ShieldCheck className="text-primary size-4" />}
-                      </div>
-                      <div className="mt-1">
-                        <p className="text-xs font-semibold text-foreground">Google Gemini</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">Pro / Flash API keys.</p>
-                      </div>
-                    </div>
-
-                    {/* Groq */}
-                    <div
-                      onClick={() => setProvider("groq")}
-                      className={`rounded-lg border p-4 cursor-pointer transition-colors relative flex flex-col justify-between h-28 ${
-                        provider === "groq" ? "border-primary bg-primary/5" : "border-border bg-background hover:bg-accent/40"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <svg className="size-5 text-orange-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-                        </svg>
-                        {provider === "groq" && <ShieldCheck className="text-primary size-4" />}
-                      </div>
-                      <div className="mt-1">
-                        <p className="text-xs font-semibold text-foreground">Groq</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">Fast hardware setups.</p>
-                      </div>
-                    </div>
-
-                    {/* OpenRouter Paid */}
-                    <div
-                      onClick={() => {
-                        setProvider("openrouter");
-                        if (openrouterModel === "auto") {
-                          setOpenrouterModel("google/gemma-2-9b-it:free");
-                        }
-                      }}
-                      className={`rounded-lg border p-4 cursor-pointer transition-colors relative flex flex-col justify-between h-28 ${
-                        provider === "openrouter" && openrouterModel !== "auto" ? "border-primary bg-primary/5" : "border-border bg-background hover:bg-accent/40"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <svg className="size-5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="12" r="3" />
-                          <circle cx="19" cy="5" r="2" />
-                          <circle cx="5" cy="19" r="2" />
-                          <circle cx="5" cy="5" r="2" />
-                          <circle cx="19" cy="19" r="2" />
-                          <line x1="17.6" y1="6.4" x2="13.4" y2="10.6" />
-                          <line x1="6.4" y1="17.6" x2="10.6" y2="13.4" />
-                          <line x1="6.4" y1="6.4" x2="10.6" y2="10.6" />
-                          <line x1="17.6" y1="17.6" x2="13.4" y2="13.4" />
-                        </svg>
-                        {provider === "openrouter" && openrouterModel !== "auto" && <ShieldCheck className="text-primary size-4" />}
-                      </div>
-                      <div className="mt-1">
-                        <p className="text-xs font-semibold text-foreground">OpenRouter API</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">Access custom paid catalog.</p>
-                      </div>
-                    </div>
-                  </div>
+              <form onSubmit={handleSaveSettings} className="grid gap-6 md:grid-cols-3">
+                {/* Bento Card 1: Active AI Routing Tiers (Spans 2 columns) */}
+                <div className="md:col-span-2 rounded-xl glass-card glow-hover p-6 text-card-foreground shadow-xl flex flex-col gap-5 relative overflow-hidden border border-primary/10">
+                  <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/5 pointer-events-none" />
                   
-                  <div className="rounded border border-border/30 bg-background/40 p-2.5 text-[10px] text-muted-foreground leading-relaxed space-y-1">
-                    <p className="font-semibold text-foreground">🔑 Option 2 Setup Instructions:</p>
-                    <ol className="list-decimal pl-4 space-y-0.5">
-                      <li>Acquire a private API key from your selected provider console (e.g. <a href="https://platform.openai.com" target="_blank" rel="noreferrer" className="text-primary underline hover:text-primary/80">OpenAI console</a>, <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" className="text-primary underline hover:text-primary/80">Anthropic console</a>, or <a href="https://aistudio.google.com" target="_blank" rel="noreferrer" className="text-primary underline hover:text-primary/80">Google AI Studio</a>).</li>
-                      <li>Select that provider in the card grid above.</li>
-                      <li>Paste your key in the form directly below, choose a model, and click <strong>Save Settings</strong>.</li>
-                    </ol>
-                  </div>
-                </div>
-
-                               {/* Option 3: Local AI */}
-                <div className="space-y-3 rounded-lg border border-border/40 bg-muted/10 p-4 relative overflow-hidden">
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-1.5">
-                      <span className="inline-flex size-2 rounded-full bg-foreground" />
-                      <span className="text-xs font-bold uppercase tracking-wider text-foreground">Option 3: Local AI Engine (100% Offline & Private)</span>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground leading-normal">
-                      Run models locally on your system. High privacy, fully offline, and free from external keys or internet dependencies. Compatible with any OpenAI/Ollama local server.
-                    </p>
-                  </div>
-                  <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
-                    {/* Ollama */}
-                    <div
-                      onClick={() => selectLocalEngine("ollama")}
-                      className={`rounded-lg border p-4 cursor-pointer transition-colors relative flex flex-col justify-between h-28 ${
-                        provider === "ollama" && localEngine === "ollama" ? "border-primary bg-primary/5" : "border-border bg-background hover:bg-accent/40"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <svg className="size-5 text-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                          <path d="M2 17l10 5 10-5" />
-                          <path d="M2 12l10 5 10-5" />
-                        </svg>
-                        {provider === "ollama" && localEngine === "ollama" && <ShieldCheck className="text-primary size-4" />}
-                      </div>
-                      <div className="mt-1">
-                        <p className="text-xs font-semibold text-foreground">Ollama</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">Local offline daemon.</p>
-                      </div>
-                    </div>
-
-                    {/* LM Studio */}
-                    <div
-                      onClick={() => selectLocalEngine("lm_studio")}
-                      className={`rounded-lg border p-4 cursor-pointer transition-colors relative flex flex-col justify-between h-28 ${
-                        provider === "ollama" && localEngine === "lm_studio" ? "border-primary bg-primary/5" : "border-border bg-background hover:bg-accent/40"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <svg className="size-5 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                          <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                          <line x1="8" y1="21" x2="16" y2="21" />
-                          <line x1="12" y1="17" x2="12" y2="21" />
-                          <circle cx="12" cy="10" r="2" />
-                        </svg>
-                        {provider === "ollama" && localEngine === "lm_studio" && <ShieldCheck className="text-primary size-4" />}
-                      </div>
-                      <div className="mt-1">
-                        <p className="text-xs font-semibold text-foreground">LM Studio</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">HF models dashboard.</p>
-                      </div>
-                    </div>
-
-                    {/* Jan */}
-                    <div
-                      onClick={() => selectLocalEngine("jan")}
-                      className={`rounded-lg border p-4 cursor-pointer transition-colors relative flex flex-col justify-between h-28 ${
-                        provider === "ollama" && localEngine === "jan" ? "border-primary bg-primary/5" : "border-border bg-background hover:bg-accent/40"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <svg className="size-5 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M12 2L2 7l10 5 10-5-10-5z" />
-                          <path d="M2 17l10 5 10-5" />
-                          <path d="M2 7v10l10 5V12L2 7z" />
-                        </svg>
-                        {provider === "ollama" && localEngine === "jan" && <ShieldCheck className="text-primary size-4" />}
-                      </div>
-                      <div className="mt-1">
-                        <p className="text-xs font-semibold text-foreground">Jan</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">Offline-first chat app.</p>
-                      </div>
-                    </div>
-
-                    {/* KoboldCPP */}
-                    <div
-                      onClick={() => selectLocalEngine("koboldcpp")}
-                      className={`rounded-lg border p-4 cursor-pointer transition-colors relative flex flex-col justify-between h-28 ${
-                        provider === "ollama" && localEngine === "koboldcpp" ? "border-primary bg-primary/5" : "border-border bg-background hover:bg-accent/40"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <svg className="size-5 text-yellow-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                        </svg>
-                        {provider === "ollama" && localEngine === "koboldcpp" && <ShieldCheck className="text-primary size-4" />}
-                      </div>
-                      <div className="mt-1">
-                        <p className="text-xs font-semibold text-foreground">KoboldCPP</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">Creative fiction server.</p>
-                      </div>
-                    </div>
-
-                    {/* Llama.cpp / Custom */}
-                    <div
-                      onClick={() => selectLocalEngine("llamacpp")}
-                      className={`rounded-lg border p-4 cursor-pointer transition-colors relative flex flex-col justify-between h-28 ${
-                        provider === "ollama" && localEngine === "llamacpp" ? "border-primary bg-primary/5" : "border-border bg-background hover:bg-accent/40"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <svg className="size-5 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="12" r="3" />
-                          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                        </svg>
-                        {provider === "ollama" && localEngine === "llamacpp" && <ShieldCheck className="text-primary size-4" />}
-                      </div>
-                      <div className="mt-1">
-                        <p className="text-xs font-semibold text-foreground">Custom / Llama.cpp</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5 leading-tight">Custom local API URL.</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {localEngine === "ollama" && (
-                    <div className="rounded border border-border/30 bg-background/40 p-2.5 text-[10px] text-muted-foreground leading-relaxed space-y-1.5 animate-in fade-in duration-300">
-                      <p className="font-semibold text-foreground">💻 Ollama Setup Instructions:</p>
-                      <ol className="list-decimal pl-4 space-y-0.5">
-                        <li>Download and install Ollama from <a href="https://ollama.com" target="_blank" rel="noreferrer" className="text-primary underline hover:text-primary/80">ollama.com</a>.</li>
-                        <li>Verify it is running in your system tray.</li>
-                        <li>Download a model in your terminal using: <pre className="bg-muted p-1 rounded mt-0.5 text-[10px] font-mono select-all text-foreground w-fit">ollama pull llama3.2:1b</pre></li>
-                        <li>Click <strong>Save Settings</strong> at the bottom. Default port is <code>11434</code>.</li>
-                      </ol>
-                    </div>
-                  )}
-
-                  {localEngine === "lm_studio" && (
-                    <div className="rounded border border-border/30 bg-background/40 p-2.5 text-[10px] text-muted-foreground leading-relaxed space-y-1.5 animate-in fade-in duration-300">
-                      <p className="font-semibold text-foreground">💻 LM Studio Setup Instructions:</p>
-                      <ol className="list-decimal pl-4 space-y-0.5">
-                        <li>Download and launch LM Studio from <a href="https://lmstudio.ai" target="_blank" rel="noreferrer" className="text-primary underline hover:text-primary/80">lmstudio.ai</a>.</li>
-                        <li>Search and download any GGUF model within the app.</li>
-                        <li>Navigate to the <strong>Local Server</strong> tab, select your downloaded model, and click <strong>Start Server</strong>.</li>
-                        <li>Click <strong>Save Settings</strong> at the bottom. Default port is <code>1234</code>.</li>
-                      </ol>
-                    </div>
-                  )}
-
-                  {localEngine === "jan" && (
-                    <div className="rounded border border-border/30 bg-background/40 p-2.5 text-[10px] text-muted-foreground leading-relaxed space-y-1.5 animate-in fade-in duration-300">
-                      <p className="font-semibold text-foreground">💻 Jan Setup Instructions:</p>
-                      <ol className="list-decimal pl-4 space-y-0.5">
-                        <li>Download and open Jan from <a href="https://jan.ai" target="_blank" rel="noreferrer" className="text-primary underline hover:text-primary/80">jan.ai</a>.</li>
-                        <li>Go to the Hub, download a local model, and load it.</li>
-                        <li>Go to Settings &gt; Local Server, and toggle **Enable Local Server** on.</li>
-                        <li>Click <strong>Save Settings</strong> at the bottom. Default port is <code>1337</code>.</li>
-                      </ol>
-                    </div>
-                  )}
-
-                  {localEngine === "koboldcpp" && (
-                    <div className="rounded border border-border/30 bg-background/40 p-2.5 text-[10px] text-muted-foreground leading-relaxed space-y-1.5 animate-in fade-in duration-300">
-                      <p className="font-semibold text-foreground">💻 KoboldCPP Setup Instructions:</p>
-                      <ol className="list-decimal pl-4 space-y-0.5">
-                        <li>Download the KoboldCPP executable from <a href="https://github.com/LostRuins/koboldcpp/releases" target="_blank" rel="noreferrer" className="text-primary underline hover:text-primary/80">GitHub Releases</a>.</li>
-                        <li>Launch the file, load your GGUF model, and click **Launch**.</li>
-                        <li>It will spin up a local server.</li>
-                        <li>Click <strong>Save Settings</strong> at the bottom. Default port is <code>5001</code>.</li>
-                      </ol>
-                    </div>
-                  )}
-
-                  {localEngine === "llamacpp" && (
-                    <div className="rounded border border-border/30 bg-background/40 p-2.5 text-[10px] text-muted-foreground leading-relaxed space-y-1.5 animate-in fade-in duration-300">
-                      <p className="font-semibold text-foreground">💻 Custom / Llama.cpp Setup Instructions:</p>
-                      <ol className="list-decimal pl-4 space-y-0.5">
-                        <li>Run your custom local server using `llama.cpp` or another OpenAI-compatible inference tool.</li>
-                        <li>Verify your local server endpoint (default is <code>http://127.0.0.1:8080</code>).</li>
-                        <li>Provide your custom local URL in the Configurations form below and click <strong>Save Settings</strong>.</li>
-                      </ol>
-                    </div>
-                  )}
-
-                  {/* Local Hardware Spec Recommendations moved inline */}
-                  <div className="rounded border border-border/30 bg-background/40 p-3.5 space-y-3">
-                    <div className="flex items-center gap-1.5 border-b border-border/30 pb-1.5">
-                      <Cpu className="size-4 text-primary" />
-                      <h4 className="font-semibold text-foreground text-xs">Local Hardware Recommendations</h4>
-                    </div>
-                    <p className="text-[10px] text-muted-foreground leading-normal">
-                      Select your system specifications to determine the optimal model size for your machine:
-                    </p>
-                    
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="grid gap-1">
-                        <label htmlFor="ram-select" className="text-[9px] font-semibold text-muted-foreground uppercase">System RAM</label>
-                        <select
-                          id="ram-select"
-                          value={ram}
-                          onChange={(e) => setRam(e.target.value)}
-                          className="h-8 rounded bg-background border border-input px-2 text-xs outline-none focus:border-primary w-full"
-                        >
-                          <option value="8">8GB RAM or Less</option>
-                          <option value="16">16GB RAM</option>
-                          <option value="32">32GB RAM</option>
-                          <option value="64">64GB RAM or More</option>
-                        </select>
-                      </div>
-
-                      <div className="grid gap-1">
-                        <label htmlFor="gpu-select" className="text-[9px] font-semibold text-muted-foreground uppercase">Graphics Card (GPU)</label>
-                        <select
-                          id="gpu-select"
-                          value={gpu}
-                          onChange={(e) => setGpu(e.target.value)}
-                          className="h-8 rounded bg-background border border-input px-2 text-xs outline-none focus:border-primary w-full"
-                        >
-                          <option value="cpu">Integrated / CPU Only (No Dedicated GPU)</option>
-                          <option value="mid">Mid-tier Dedicated (4GB - 8GB VRAM)</option>
-                          <option value="high">High-tier Dedicated (12GB - 24GB+ VRAM)</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    <div className="rounded bg-muted/40 p-3 border-l-2 border-primary text-xs leading-5 text-muted-foreground flex flex-col gap-1.5 mt-1 animate-in fade-in duration-300">
-                      <div className="flex items-center gap-1.5 font-semibold text-foreground text-[11px]">
-                        <Sparkles className="size-3.5 text-primary" /> Recommended: {modelRecommendation.model}
-                      </div>
-                      <p className="text-[10px] leading-relaxed text-muted-foreground">{modelRecommendation.desc}</p>
-                      <div className="mt-1">
-                        <p className="text-[9px] font-bold text-foreground">Command:</p>
-                        <pre className="bg-muted p-1.5 rounded mt-1 text-[9px] font-mono select-all text-foreground overflow-x-auto">
-                          {modelRecommendation.cmd}
-                        </pre>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-
-
-              {/* Provider Config Fields */}
-              <div className="space-y-4 pt-2">
-                {/* Ollama Config */}
-                {provider === "ollama" && (
-                  <div className="space-y-4 animate-in fade-in-50 duration-300">
-                    <h3 className="text-sm font-semibold border-b border-border pb-2 flex items-center gap-2 capitalize">
-                      <Globe className="size-4 text-primary" /> {localEngine.replace("_", " ")} Configurations
+                  <div>
+                    <h3 className="text-base font-bold border-b border-border pb-3 flex items-center gap-2.5 text-foreground">
+                      <span className="flex size-6 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Cpu className="size-4" />
+                      </span>
+                      Active AI Routing Options
                     </h3>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="grid gap-2">
-                        <label htmlFor="ollama-url" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Base URL</label>
-                        <input id="ollama-url" type="text" value={ollamaUrl} onChange={(e) => setOllamaUrl(e.target.value)} className="h-10 rounded-lg border border-border/80 bg-background/50 px-3 text-sm outline-none transition-all focus:border-primary/80 focus:ring-2 focus:ring-primary/20" />
-                        <p className="text-[10px] text-muted-foreground leading-normal mt-0.5">
-                          Defaults to <code>{DEFAULT_LOCAL_URLS[localEngine] || "http://127.0.0.1:11434"}</code>. Change if running on a remote server or custom port.
+                    <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+                      Select how you want to route your workspace queries. Toggle between keyless free models, personal cloud API keys, or completely offline local engines.
+                    </p>
+                  </div>
+
+                  <div className="space-y-4 relative z-10">
+                    {/* Option 1: Free AI */}
+                    <div className="space-y-3 rounded-xl border border-primary/20 bg-primary/5 p-4 relative overflow-hidden transition-all duration-300 hover:border-primary/30">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex size-2.5 rounded-full bg-cyan-400 animate-pulse" />
+                          <span className="text-xs font-bold uppercase tracking-wider text-cyan-400">Option 1: Free Cloud AI (Requires OpenRouter Key)</span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground leading-normal">
+                          Uses OpenRouter free models (e.g. Qwen for code, Hermes for logic) to bypass rate limits. Requires you to configure an OpenRouter API key.
                         </p>
                       </div>
-                      <div className="grid gap-2">
-                        <label htmlFor="ollama-select" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Default Model</label>
-                        <select id="ollama-select" value={ollamaSelect} onChange={(e) => setOllamaSelect(e.target.value)} className="h-10 rounded-lg border border-border/80 bg-background/50 px-3 text-sm outline-none transition-all focus:border-primary/80 focus:ring-2 focus:ring-primary/20">
-                          {OLLAMA_MODELS.map((m) => (
-                            <option key={m} value={m}>{m}</option>
-                          ))}
-                        </select>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <div
+                          onClick={() => {
+                            setProvider("openrouter");
+                            setOpenrouterModel("auto");
+                          }}
+                          className={`rounded-lg border p-4 cursor-pointer transition-all duration-300 relative flex flex-col justify-between h-24 ${
+                            provider === "openrouter" && openrouterModel === "auto" 
+                              ? "border-primary bg-primary/10 shadow-md scale-[1.02]" 
+                              : "border-border bg-background/50 hover:bg-accent/40 hover:scale-[1.01]"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between">
+                            <svg className="size-5 text-cyan-400 animate-spin-slow" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12" cy="12" r="3" />
+                              <circle cx="19" cy="5" r="2" />
+                              <circle cx="5" cy="19" r="2" />
+                              <circle cx="5" cy="5" r="2" />
+                              <circle cx="19" cy="19" r="2" />
+                            </svg>
+                            {provider === "openrouter" && openrouterModel === "auto" && <ShieldCheck className="text-primary size-5" />}
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-foreground">Autoselect Free AI</p>
+                            <p className="text-[10px] text-muted-foreground">Task-driven failover pool</p>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                    {ollamaSelect === "custom" && (
-                      <div className="grid gap-2 pt-2 animate-in slide-in-from-top-1 duration-200">
-                        <label htmlFor="ollama-model-custom" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Enter Custom Model Tag</label>
-                        <input id="ollama-model-custom" type="text" value={ollamaModel} onChange={(e) => setOllamaModel(e.target.value)} placeholder="e.g. codegemma" className="h-10 rounded-lg border border-border/80 bg-background/50 px-3 text-sm outline-none transition-all focus:border-primary/80 focus:ring-2 focus:ring-primary/20" />
+
+                    {/* Option 2: Paid API */}
+                    <div className="space-y-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 relative overflow-hidden transition-all duration-300 hover:border-emerald-500/30">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex size-2.5 rounded-full bg-emerald-500" />
+                          <span className="text-xs font-bold uppercase tracking-wider text-emerald-500">Option 2: Personal API Keys (Bring Your Own Key)</span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground leading-normal">
+                          Connect directly to flagship commercial endpoints. Keys are stored locally in your browser state and never touch external servers.
+                        </p>
+                      </div>
+                      <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
+                        {[
+                          { id: "openai", name: "OpenAI", color: "text-emerald-500", desc: "GPT-4o flagship model" },
+                          { id: "anthropic", name: "Anthropic", color: "text-amber-500", desc: "Claude 3.5 precision" },
+                          { id: "gemini", name: "Gemini", color: "text-indigo-400", desc: "Google Ultra long-context" },
+                          { id: "groq", name: "Groq", color: "text-orange-500", desc: "Ultra-fast inference" }
+                        ].map((p) => (
+                          <div
+                            key={p.id}
+                            onClick={() => setProvider(p.id)}
+                            className={`rounded-lg border p-3 cursor-pointer transition-all duration-300 relative flex flex-col justify-between h-24 ${
+                              provider === p.id 
+                                ? "border-primary bg-primary/10 shadow-md scale-[1.02]" 
+                                : "border-border bg-background/50 hover:bg-accent/40 hover:scale-[1.01]"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between">
+                              <span className={`inline-flex size-2 rounded-full ${p.color} bg-current`} />
+                              {provider === p.id && <ShieldCheck className="text-primary size-4" />}
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold text-foreground">{p.name}</p>
+                              <p className="text-[9px] text-muted-foreground leading-tight mt-0.5">{p.desc}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Option 3: Local AI */}
+                    <div className="space-y-3 rounded-xl border border-foreground/10 bg-foreground/5 p-4 relative overflow-hidden transition-all duration-300 hover:border-foreground/20">
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex size-2.5 rounded-full bg-foreground" />
+                          <span className="text-xs font-bold uppercase tracking-wider text-foreground">Option 3: Local AI Engine (100% Offline & Private)</span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground leading-normal">
+                          Run models locally on your system. Compatible with any local server (Ollama, LM Studio, Jan).
+                        </p>
+                      </div>
+                      <div className="grid gap-3 grid-cols-2 sm:grid-cols-3">
+                        {[
+                          { id: "ollama", name: "Ollama", desc: "Default runtime (port 11434)" },
+                          { id: "lm_studio", name: "LM Studio", desc: "Local server (port 1234)" },
+                          { id: "jan", name: "Jan", desc: "Offline engine (port 1337)" }
+                        ].map((eng) => (
+                          <div
+                            key={eng.id}
+                            onClick={() => selectLocalEngine(eng.id)}
+                            className={`rounded-lg border p-3 cursor-pointer transition-all duration-300 relative flex flex-col justify-between h-24 ${
+                              provider === "ollama" && localEngine === eng.id 
+                                ? "border-primary bg-primary/10 shadow-md scale-[1.02]" 
+                                : "border-border bg-background/50 hover:bg-accent/40 hover:scale-[1.01]"
+                            }`}
+                          >
+                            <div className="flex items-start justify-between">
+                              <span className="size-2 rounded-full bg-foreground" />
+                              {provider === "ollama" && localEngine === eng.id && <ShieldCheck className="text-primary size-4" />}
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold text-foreground">{eng.name}</p>
+                              <p className="text-[9px] text-muted-foreground leading-tight mt-0.5">{eng.desc}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bento Card 2: Dynamic Credentials Card & Setup Guides (Spans 1 column on the right) */}
+                <div className="md:col-span-1 rounded-xl glass-card glow-hover p-6 text-card-foreground shadow-xl flex flex-col gap-4 border border-primary/10 relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/5 pointer-events-none" />
+                  
+                  <div>
+                    <h3 className="text-base font-bold border-b border-border pb-3 flex items-center gap-2.5 text-foreground">
+                      <span className="flex size-6 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Key className="size-4" />
+                      </span>
+                      Credentials Setup
+                    </h3>
+                  </div>
+
+                  <div className="flex-1 flex flex-col justify-between gap-5 pt-2 relative z-10">
+                    <div className="grid gap-4">
+                      {provider === "openai" && (
+                        <div className="grid gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                          <label htmlFor="sidebar-openai-key" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">OpenAI API Key</label>
+                          <input
+                            id="sidebar-openai-key"
+                            type="password"
+                            value={openaiKey}
+                            onChange={(e) => setOpenaiKey(e.target.value)}
+                            placeholder="sk-proj-..."
+                            className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                          />
+                        </div>
+                      )}
+
+                      {provider === "anthropic" && (
+                        <div className="grid gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                          <label htmlFor="sidebar-anthropic-key" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Anthropic API Key</label>
+                          <input
+                            id="sidebar-anthropic-key"
+                            type="password"
+                            value={anthropicKey}
+                            onChange={(e) => setAnthropicKey(e.target.value)}
+                            placeholder="sk-ant-..."
+                            className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                          />
+                        </div>
+                      )}
+
+                      {provider === "gemini" && (
+                        <div className="grid gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                          <label htmlFor="sidebar-gemini-key" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Gemini API Key</label>
+                          <input
+                            id="sidebar-gemini-key"
+                            type="password"
+                            value={geminiKey}
+                            onChange={(e) => setGeminiKey(e.target.value)}
+                            placeholder="AIzaSy..."
+                            className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                          />
+                        </div>
+                      )}
+
+                      {provider === "groq" && (
+                        <div className="grid gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                          <label htmlFor="sidebar-groq-key" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Groq API Key</label>
+                          <input
+                            id="sidebar-groq-key"
+                            type="password"
+                            value={groqKey}
+                            onChange={(e) => setGroqKey(e.target.value)}
+                            placeholder="gsk_..."
+                            className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                          />
+                        </div>
+                      )}
+
+                      {provider === "openrouter" && (
+                        <div className="grid gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                          <label htmlFor="sidebar-or-key" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">OpenRouter API Key</label>
+                          <input
+                            id="sidebar-or-key"
+                            type="password"
+                            value={openrouterKey}
+                            onChange={(e) => setOpenrouterKey(e.target.value)}
+                            placeholder="sk-or-..."
+                            className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all"
+                          />
+                        </div>
+                      )}
+
+                      {provider === "ollama" && (
+                        <div className="grid gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                          <label htmlFor="sidebar-ollama-url" className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Ollama Endpoint URL</label>
+                          <input
+                            id="sidebar-ollama-url"
+                            type="text"
+                            value={ollamaUrl}
+                            onChange={(e) => setOllamaUrl(e.target.value)}
+                            placeholder="http://127.0.0.1:11434"
+                            className="h-10 rounded-lg border border-input bg-background px-3 text-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* DYNAMIC SETUP INSTRUCTIONS BASED ON PROVIDER */}
+                    <div className="mt-2 border-t border-border pt-4">
+                      {provider === "ollama" ? (
+                        <div className="space-y-3 animate-in fade-in duration-300">
+                          <p className="text-[11px] font-bold text-primary flex items-center gap-1.5 uppercase tracking-wider">
+                            <Sparkles className="size-3 text-primary animate-pulse" /> Local Hardware Setup
+                          </p>
+                          <div className="text-[10px] text-muted-foreground leading-relaxed space-y-2">
+                            <p>To launch models offline on your machine:</p>
+                            <ol className="list-decimal pl-4 space-y-1">
+                              <li>Download Ollama from <a href="https://ollama.com" target="_blank" rel="noopener noreferrer" className="text-primary font-bold underline hover:text-primary/80">ollama.com</a>.</li>
+                              <li>Install & run the daemon.</li>
+                              <li>Run in your terminal to fetch model:
+                                <code className="block mt-1 p-1 bg-muted rounded font-mono text-[9px] text-foreground border border-border select-all">ollama pull llama3.2</code>
+                              </li>
+                            </ol>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-3 animate-in fade-in duration-300">
+                          <p className="text-[11px] font-bold text-primary flex items-center gap-1.5 uppercase tracking-wider">
+                            <Key className="size-3 text-primary" /> How to Acquire API Keys
+                          </p>
+                          <div className="text-[10px] text-muted-foreground leading-relaxed space-y-2">
+                            {provider === "openai" && (
+                              <p>Visit <a href="https://platform.openai.com" target="_blank" rel="noopener noreferrer" className="text-primary font-bold underline hover:text-primary/80">platform.openai.com</a>. Go to API Keys in the sidebar dashboard, create a new secret key, and paste it above.</p>
+                            )}
+                            {provider === "anthropic" && (
+                              <p>Sign in to <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer" className="text-primary font-bold underline hover:text-primary/80">console.anthropic.com</a>. Go to the API Keys section to generate a credentials key beginning with <code>sk-ant-</code>.</p>
+                            )}
+                            {provider === "gemini" && (
+                              <p>Navigate to <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer" className="text-primary font-bold underline hover:text-primary/80">aistudio.google.com</a>. Click on "Get API Key" to obtain a Google Cloud token (free & paid tiers available).</p>
+                            )}
+                            {provider === "groq" && (
+                              <p>Log in to <a href="https://console.groq.com" target="_blank" rel="noopener noreferrer" className="text-primary font-bold underline hover:text-primary/80">console.groq.com</a>. Open API Keys tab and create a token beginning with <code>gsk_</code>.</p>
+                            )}
+                            {provider === "openrouter" && (
+                              <p>Go to <a href="https://openrouter.ai" target="_blank" rel="noopener noreferrer" className="text-primary font-bold underline hover:text-primary/80">openrouter.ai</a>, navigate to Settings &gt; Keys, and create a custom API key to unlock autoselect free tier or advanced paid systems.</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bento Card 3: Model Config & Recommendations (Spans 2 columns) */}
+                <div className="md:col-span-2 rounded-xl glass-card glow-hover p-6 text-card-foreground shadow-xl flex flex-col gap-4 border border-primary/10 relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/5 pointer-events-none" />
+                  
+                  <div>
+                    <h3 className="text-base font-bold border-b border-border pb-3 flex items-center gap-2.5 text-foreground">
+                      <span className="flex size-6 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <Settings className="size-4" />
+                      </span>
+                      Active Model Configurations
+                    </h3>
+                  </div>
+
+                  <div className="grid gap-5 sm:grid-cols-2 relative z-10">
+                    {/* Model Dropdown selectors based on selected provider */}
+                    <div className="space-y-4">
+                      {provider === "openai" && (
+                        <div className="grid gap-1.5 animate-in fade-in duration-200">
+                          <label htmlFor="openai-model" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">OpenAI Model</label>
+                          <select id="openai-model" value={openaiModel} onChange={(e) => setOpenaiModel(e.target.value)} className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary transition-all">
+                            {OPENAI_MODELS.map((m) => (
+                              <option key={m} value={m}>{m}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {provider === "anthropic" && (
+                        <div className="grid gap-1.5 animate-in fade-in duration-200">
+                          <label htmlFor="anthropic-model" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Anthropic Model</label>
+                          <select id="anthropic-model" value={anthropicModel} onChange={(e) => setAnthropicModel(e.target.value)} className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary transition-all">
+                            {ANTHROPIC_MODELS.map((m) => (
+                              <option key={m} value={m}>{m}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {provider === "gemini" && (
+                        <div className="grid gap-1.5 animate-in fade-in duration-200">
+                          <label htmlFor="gemini-model" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Gemini Model</label>
+                          <select id="gemini-model" value={geminiModel} onChange={(e) => setGeminiModel(e.target.value)} className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary transition-all">
+                            {GEMINI_MODELS.map((m) => (
+                              <option key={m} value={m}>{m}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {provider === "groq" && (
+                        <div className="grid gap-1.5 animate-in fade-in duration-200">
+                          <label htmlFor="groq-model" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Groq Model</label>
+                          <select id="groq-model" value={groqModel} onChange={(e) => setGroqModel(e.target.value)} className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary transition-all">
+                            {GROQ_MODELS.map((m) => (
+                              <option key={m} value={m}>{m}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {provider === "openrouter" && (
+                        <div className="grid gap-1.5 animate-in fade-in duration-200">
+                          <label htmlFor="or-model" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">OpenRouter Free Model</label>
+                          <select id="or-model" value={openrouterModel} onChange={(e) => setOpenrouterModel(e.target.value)} className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-primary transition-all">
+                            {OPENROUTER_MODELS.map((m) => (
+                              <option key={m} value={m}>{m === "auto" ? "Autoselect Free Tier" : (m.split("/")[1] || m)}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {provider === "ollama" && (
+                        <div className="grid gap-1.5 animate-in fade-in duration-200">
+                          <label htmlFor="ollama-select" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Local Engine Model</label>
+                          <select id="ollama-select" value={ollamaSelect} onChange={(e) => setOllamaSelect(e.target.value)} className="h-10 rounded-lg border border-border/80 bg-background px-3 text-sm outline-none transition-all focus:border-primary">
+                            {OLLAMA_MODELS.map((m) => (
+                              <option key={m} value={m}>{m}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Routing and Telemetry toggles */}
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between rounded-lg border border-border/40 p-3 bg-muted/10">
+                        <div>
+                          <p className="text-xs font-semibold">ML Auto-Routing</p>
+                          <p className="text-[10px] text-muted-foreground">Select models based on task complexity</p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={mlRouting}
+                          onChange={(e) => setMlRouting(e.target.checked)}
+                          className="size-4 accent-primary cursor-pointer"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between rounded-lg border border-border/40 p-3 bg-muted/10">
+                        <div>
+                          <p className="text-xs font-semibold">Telemetry Sharing</p>
+                          <p className="text-[10px] text-muted-foreground">Anonymously share latency performance logs</p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={sharedTelemetry}
+                          onChange={(e) => setSharedTelemetry(e.target.checked)}
+                          className="size-4 accent-primary cursor-pointer"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* HARDWARE SPECIFICATION BASED LOCAL MODEL GUIDE */}
+                  <div className="rounded-xl border border-border/30 bg-background/50 p-4 space-y-3 mt-2 relative z-10">
+                    <div className="flex items-center justify-between border-b border-border/30 pb-2">
+                      <div className="flex items-center gap-1.5 font-bold text-foreground text-xs">
+                        <Sparkles className="size-4 text-primary animate-pulse" /> 💻 Hardware Specification Compatibility Matrix
+                      </div>
+                      <span className="text-[9px] bg-primary/10 text-primary font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Specs Map</span>
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-4 text-[10px]">
+                      <div className="rounded-lg border border-border/40 p-2.5 bg-muted/5 flex flex-col justify-between">
+                        <div>
+                          <p className="font-bold text-foreground">8GB RAM / CPU</p>
+                          <p className="text-muted-foreground text-[9px] mt-0.5">Ultra-light model weight</p>
+                        </div>
+                        <code className="mt-2 block p-1 bg-muted rounded font-mono text-[8px] text-primary">llama3.2:1b</code>
+                      </div>
+                      <div className="rounded-lg border border-border/40 p-2.5 bg-muted/5 flex flex-col justify-between">
+                        <div>
+                          <p className="font-bold text-foreground">16GB RAM / Mid GPU</p>
+                          <p className="text-muted-foreground text-[9px] mt-0.5">Standard coding setup</p>
+                        </div>
+                        <code className="mt-2 block p-1 bg-muted rounded font-mono text-[8px] text-primary">llama3.1:8b</code>
+                      </div>
+                      <div className="rounded-lg border border-border/40 p-2.5 bg-muted/5 flex flex-col justify-between">
+                        <div>
+                          <p className="font-bold text-foreground">32GB RAM / High GPU</p>
+                          <p className="text-muted-foreground text-[9px] mt-0.5">Advanced developer tier</p>
+                        </div>
+                        <code className="mt-2 block p-1 bg-muted rounded font-mono text-[8px] text-primary">qwen2.5:14b</code>
+                      </div>
+                      <div className="rounded-lg border border-border/40 p-2.5 bg-muted/5 flex flex-col justify-between">
+                        <div>
+                          <p className="font-bold text-foreground">64GB+ RAM / VRAM</p>
+                          <p className="text-muted-foreground text-[9px] mt-0.5">Flagship server scale</p>
+                        </div>
+                        <code className="mt-2 block p-1 bg-muted rounded font-mono text-[8px] text-primary">llama3.3:70b</code>
+                      </div>
+                    </div>
+
+                    {provider === "ollama" && (
+                      <div className="text-[10px] text-muted-foreground bg-primary/5 p-3 rounded-lg border border-primary/20 leading-relaxed mt-2 animate-in fade-in duration-300">
+                        <strong>Hardware Suggestion:</strong> Based on your local selection, we recommend running <code>{modelRecommendation.model}</code>. {modelRecommendation.desc}
                       </div>
                     )}
                   </div>
-                )}
+                </div>
 
-                {/* OpenAI Config */}
-                {provider === "openai" && (
-                  <div className="space-y-4 animate-in fade-in-50 duration-300">
-                    <h3 className="text-sm font-semibold border-b border-border pb-2 flex items-center gap-2">
-                      <Globe className="size-4 text-primary" /> OpenAI Configurations
+                {/* Bento Card 4: Action Center & Health Status (Spans 1 column) */}
+                <div className="md:col-span-1 rounded-xl glass-card glow-hover p-6 text-card-foreground shadow-xl flex flex-col justify-between gap-5 border border-primary/10 relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/5 pointer-events-none" />
+                  
+                  <div className="space-y-4 relative z-10">
+                    <h3 className="text-base font-bold border-b border-border pb-3">
+                      Control Center
                     </h3>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="grid gap-2">
-                        <label htmlFor="openai-key" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">API Key</label>
-                        <input id="openai-key" type="password" value={openaiKey} onChange={(e) => setOpenaiKey(e.target.value)} placeholder="sk-proj-..." className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30" />
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between rounded-lg border border-border/30 px-3 py-2 bg-background/40">
+                        <span className="text-xs text-muted-foreground">Local Server:</span>
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-green-600 dark:text-green-400">
+                          <span className="size-2 rounded-full bg-green-500 animate-pulse" />
+                          Online
+                        </div>
                       </div>
-                      <div className="grid gap-2">
-                        <label htmlFor="openai-model" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Select Model</label>
-                        <select id="openai-model" value={openaiModel} onChange={(e) => setOpenaiModel(e.target.value)} className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30">
-                          {OPENAI_MODELS.map((m) => (
-                            <option key={m} value={m}>{m}</option>
-                          ))}
-                        </select>
+                      <div className="flex items-center justify-between rounded-lg border border-border/30 px-3 py-2 bg-background/40">
+                        <span className="text-xs text-muted-foreground">Cloud Tiers:</span>
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-green-600 dark:text-green-400">
+                          <span className="size-2 rounded-full bg-green-500" />
+                          Available
+                        </div>
                       </div>
                     </div>
                   </div>
-                )}
 
-                {/* Anthropic Config */}
-                {provider === "anthropic" && (
-                  <div className="space-y-4 animate-in fade-in-50 duration-300">
-                    <h3 className="text-sm font-semibold border-b border-border pb-2 flex items-center gap-2">
-                      <Globe className="size-4 text-primary" /> Anthropic Configurations
-                    </h3>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="grid gap-2">
-                        <label htmlFor="anthropic-key" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">API Key</label>
-                        <input id="anthropic-key" type="password" value={anthropicKey} onChange={(e) => setAnthropicKey(e.target.value)} placeholder="sk-ant-..." className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30" />
-                      </div>
-                      <div className="grid gap-2">
-                        <label htmlFor="anthropic-model" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Select Model</label>
-                        <select id="anthropic-model" value={anthropicModel} onChange={(e) => setAnthropicModel(e.target.value)} className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30">
-                          {ANTHROPIC_MODELS.map((m) => (
-                            <option key={m} value={m}>{m}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                  <div className="space-y-3 pt-4 border-t border-border relative z-10">
+                    <div className="flex flex-col gap-2.5">
+                      <Button type="submit" disabled={isSaving} className="w-full h-10 font-bold transition-all hover:scale-[1.02]">
+                        {isSaving ? "Saving Settings..." : "Save Settings"}
+                        {saveSuccess ? <Check className="size-4 text-green-500" /> : <Save className="size-4" />}
+                      </Button>
+                      
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        onClick={handleTestConnection} 
+                        disabled={testingConnection}
+                        className="w-full h-10 font-bold transition-all hover:scale-[1.02]"
+                      >
+                        {testingConnection ? "Testing Connection..." : "Test Connection"}
+                      </Button>
 
-                {/* OpenRouter Config */}
-                {provider === "openrouter" && (
-                  <div className="space-y-4 animate-in fade-in-50 duration-300">
-                    <h3 className="text-sm font-semibold border-b border-border pb-2 flex items-center gap-2">
-                      <Globe className="size-4 text-primary" /> OpenRouter Configurations
-                    </h3>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="grid gap-2">
-                        <label htmlFor="or-key" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">API Key</label>
-                        <input id="or-key" type="password" value={openrouterKey} onChange={(e) => setOpenrouterKey(e.target.value)} placeholder="sk-or-..." className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30" />
-                      </div>
-                      <div className="grid gap-2">
-                        <label htmlFor="or-model" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Select Free Model</label>
-                        <select id="or-model" value={openrouterModel} onChange={(e) => setOpenrouterModel(e.target.value)} className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30">
-                          {OPENROUTER_MODELS.map((m) => (
-                            <option key={m} value={m}>{m === "auto" ? "(Recommended) Autoselect Free Tier" : (m.split("/")[1] || m)}</option>
-                          ))}
-                        </select>
-                      </div>
+                      {isVerified && (
+                        <Button
+                          type="button"
+                          className="w-full h-10 bg-green-600 hover:bg-green-700 text-white font-bold flex items-center justify-center gap-2 animate-bounce transition-all hover:scale-[1.02]"
+                          onClick={() => router.push("/ai-control")}
+                        >
+                          Proceed to Dashboard
+                        </Button>
+                      )}
                     </div>
-                    {openrouterModel === "auto" && (
-                      <p className="text-[10px] text-muted-foreground bg-accent/30 p-2.5 rounded-lg border border-border/40 leading-relaxed">
-                        💡 <strong>Autoselect Active:</strong> The platform will analyze your prompt tasks (e.g. programming, writing, math) and request the optimal free cloud model dynamically. If an API rate limit or quota finishes, the kernel automatically fails over to other online pool models.
-                      </p>
+
+                    {testResult && (
+                      <div className={`text-[10px] p-3 rounded-lg border leading-relaxed mt-2 animate-in fade-in duration-300 ${
+                        testResult.success 
+                          ? "bg-green-500/10 border-green-500/20 text-green-600 dark:text-green-400 font-semibold" 
+                          : "bg-red-500/10 border-red-500/20 text-red-600 dark:text-red-400"
+                      }`}>
+                        {testResult.message}
+                      </div>
                     )}
                   </div>
-                )}
+                </div>
 
-                {/* Gemini Config */}
-                {provider === "gemini" && (
-                  <div className="space-y-4 animate-in fade-in-50 duration-300">
-                    <h3 className="text-sm font-semibold border-b border-border pb-2 flex items-center gap-2">
-                      <Globe className="size-4 text-primary" /> Gemini Configurations
+                {/* Bento Card 5: FAQ Chatbot Assistant (Spans 3 columns) */}
+                <div className="md:col-span-3 rounded-xl glass-card glow-hover p-5 text-card-foreground shadow-xl flex flex-col gap-4 border border-primary/10 relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/5 pointer-events-none" />
+                  
+                  <div className="flex items-center justify-between border-b border-border pb-3 relative z-10">
+                    <h3 className="text-xs font-semibold flex items-center gap-1.5 uppercase tracking-wider text-primary">
+                      <MessageSquare className="size-4" /> FAQ Chat Assistant & Reference Guide
                     </h3>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="grid gap-2">
-                        <label htmlFor="gemini-key" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">API Key</label>
-                        <input id="gemini-key" type="password" value={geminiKey} onChange={(e) => setGeminiKey(e.target.value)} placeholder="AIzaSy..." className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30" />
+                  </div>
+
+                  <div className="grid gap-5 md:grid-cols-3 relative z-10">
+                    {/* Chat log spans 2 columns */}
+                    <div className="md:col-span-2 flex flex-col justify-between gap-3 border-r border-border/40 pr-5">
+                      <div className="flex flex-col gap-2 max-h-[160px] overflow-y-auto pr-1 text-xs scrollbar-thin">
+                        {faqMessages.map((msg, idx) => (
+                          <div
+                            key={idx}
+                            className={`flex gap-2 max-w-[85%] rounded-lg p-2.5 leading-relaxed ${
+                              msg.role === "user"
+                                ? "ml-auto bg-primary/10 border border-primary/20 text-foreground"
+                                : "mr-auto bg-muted/60 border border-border/40 text-muted-foreground"
+                            }`}
+                          >
+                            <div className="flex flex-col gap-1">
+                              <p className="whitespace-pre-line text-[11px] leading-relaxed">{msg.content}</p>
+                            </div>
+                          </div>
+                        ))}
+                        {faqLoading && (
+                          <div className="flex items-center gap-2 mr-auto bg-muted/30 border border-border/20 rounded-lg p-2 text-muted-foreground animate-pulse">
+                            <Loader2 className="size-3 animate-spin text-primary" />
+                            <span className="text-[10px]">Thinking...</span>
+                          </div>
+                        )}
                       </div>
-                      <div className="grid gap-2">
-                        <label htmlFor="gemini-model" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Select Model</label>
-                        <select id="gemini-model" value={geminiModel} onChange={(e) => setGeminiModel(e.target.value)} className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30">
-                          {GEMINI_MODELS.map((m) => (
-                            <option key={m} value={m}>{m}</option>
-                          ))}
-                        </select>
+
+                      <form onSubmit={handleSendFaq} className="flex gap-2 border-t border-border/40 pt-2">
+                        <input
+                          type="text"
+                          value={faqInput}
+                          onChange={(e) => setFaqInput(e.target.value)}
+                          placeholder="Ask about setup, ports, model recommendations..."
+                          className="flex-1 h-9 rounded-lg border border-input bg-background px-3 text-xs outline-none focus:border-primary"
+                        />
+                        <button
+                          type="submit"
+                          disabled={faqLoading || !faqInput.trim()}
+                          className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground hover:bg-primary/95 disabled:opacity-50 transition-all hover:scale-[1.02]"
+                        >
+                          <Send className="size-3.5" />
+                        </button>
+                      </form>
+                    </div>
+
+                    {/* Quick suggestion tools and chip references span 1 column */}
+                    <div className="flex flex-col justify-between text-[10px] gap-3 pt-1">
+                      <div>
+                        <p className="font-semibold text-foreground mb-2 uppercase tracking-wider text-[9px] text-muted-foreground">Quick Helpers:</p>
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" onClick={() => handleSendFaq(undefined, "How to install Ollama?")} className="rounded-lg border border-border bg-background/50 px-2.5 py-1 text-[9px] font-semibold text-muted-foreground hover:bg-accent hover:text-foreground hover:scale-[1.02] transition-all">Local Setup</button>
+                          <button type="button" onClick={() => handleSendFaq(undefined, "How do I get an API Key?")} className="rounded-lg border border-border bg-background/50 px-2.5 py-1 text-[9px] font-semibold text-muted-foreground hover:bg-accent hover:text-foreground hover:scale-[1.02] transition-all">Get Keys</button>
+                          <button type="button" onClick={() => handleSendFaq(undefined, "Which model fits my computer RAM?")} className="rounded-lg border border-border bg-background/50 px-2.5 py-1 text-[9px] font-semibold text-muted-foreground hover:bg-accent hover:text-foreground hover:scale-[1.02] transition-all">Spec Guide</button>
+                          <button type="button" onClick={() => handleSendFaq(undefined, "Explain Tier 1 Free Cloud AI")} className="rounded-lg border border-border bg-background/50 px-2.5 py-1 text-[9px] font-semibold text-muted-foreground hover:bg-accent hover:text-foreground hover:scale-[1.02] transition-all">Free Tier</button>
+                        </div>
+                      </div>
+                      <div className="rounded-lg bg-accent/20 p-2.5 text-[9px] leading-relaxed text-muted-foreground border border-border/40">
+                        💡 <strong>Help Tip:</strong> Type any hardware specification query to check compatibility with local models.
                       </div>
                     </div>
                   </div>
-                )}
-
-                {/* Groq Config */}
-                {provider === "groq" && (
-                  <div className="space-y-4 animate-in fade-in-50 duration-300">
-                    <h3 className="text-sm font-semibold border-b border-border pb-2 flex items-center gap-2">
-                      <Globe className="size-4 text-primary" /> Groq Configurations
-                    </h3>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                      <div className="grid gap-2">
-                        <label htmlFor="groq-key" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">API Key</label>
-                        <input id="groq-key" type="password" value={groqKey} onChange={(e) => setGroqKey(e.target.value)} placeholder="gsk_..." className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30" />
-                      </div>
-                      <div className="grid gap-2">
-                        <label htmlFor="groq-model" className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Select Model</label>
-                        <select id="groq-model" value={groqModel} onChange={(e) => setGroqModel(e.target.value)} className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30">
-                          {GROQ_MODELS.map((m) => (
-                            <option key={m} value={m}>{m}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-
-
-              {/* Save triggers */}
-              <div className="flex items-center gap-4 pt-4 border-t border-border">
-                <Button type="submit" disabled={isSaving}>
-                  {isSaving ? "Saving Settings..." : "Save Settings"}
-                  {saveSuccess ? <Check className="size-4 text-green-500" /> : <Save className="size-4" />}
-                </Button>
-                {saveSuccess && (
-                  <span className="text-xs text-green-600 dark:text-green-400 font-semibold animate-fade-in">
-                    Settings saved successfully!
-                  </span>
-                )}
-              </div>
-            </form>
+                </div>
+              </form>
             ) : (
               <div className="space-y-8 animate-in fade-in-50 duration-300">
                 {/* Profile Form */}
@@ -1360,133 +1396,7 @@ export default function SettingsPage() {
             )}
           </section>
 
-          {/* Sidebar Info */}
-          <aside className="space-y-4">
-            {/* FAQ Assistant Chatbox */}
-            <div className="rounded-lg glass-card glow-hover p-4 text-card-foreground shadow-lg flex flex-col gap-3 relative overflow-hidden">
-              <div className="flex items-center justify-between border-b border-border pb-2">
-                <h3 className="text-xs font-semibold flex items-center gap-1.5 uppercase tracking-wider text-primary">
-                  <MessageSquare className="size-4" /> FAQ Chat Assistant
-                </h3>
-                <span className="inline-flex items-center gap-1 rounded-full bg-cyan-500/10 px-2 py-0.5 text-[9px] font-medium text-cyan-400">
-                  <span className="size-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                  Free Router
-                </span>
-              </div>
-
-              {/* Chat Messages Log */}
-              <div className="flex flex-col gap-2 max-h-[220px] overflow-y-auto pr-1 text-xs scrollbar-thin">
-                {faqMessages.map((msg, idx) => (
-                  <div
-                    key={idx}
-                    className={`flex gap-2 max-w-[85%] rounded-lg p-2.5 leading-relaxed ${
-                      msg.role === "user"
-                        ? "ml-auto bg-primary/10 border border-primary/20 text-foreground"
-                        : "mr-auto bg-muted/60 border border-border/40 text-muted-foreground"
-                    }`}
-                  >
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-1 text-[9px] font-semibold text-muted-foreground uppercase">
-                        {msg.role === "user" ? (
-                          <>
-                            <User className="size-2.5" /> You
-                          </>
-                        ) : (
-                          <>
-                            <Bot className="size-2.5 text-primary" /> Assistant
-                          </>
-                        )}
-                      </div>
-                      <p className="whitespace-pre-line text-[11px] leading-relaxed">{msg.content}</p>
-                    </div>
-                  </div>
-                ))}
-                {faqLoading && (
-                  <div className="flex items-center gap-2 mr-auto bg-muted/30 border border-border/20 rounded-lg p-2.5 text-muted-foreground max-w-[80%] animate-pulse">
-                    <Loader2 className="size-3 animate-spin text-primary" />
-                    <span className="text-[10px]">Assistant is thinking...</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Quick Suggestion Chips */}
-              <div className="flex flex-wrap gap-1.5 pt-1.5">
-                <button
-                  type="button"
-                  onClick={() => handleSendFaq(undefined, "How to install Ollama?")}
-                  className="rounded border border-border bg-background/50 px-1.5 py-0.5 text-[9px] text-muted-foreground hover:bg-accent hover:text-foreground transition-all"
-                >
-                  Local Setup
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSendFaq(undefined, "How do I get an API Key?")}
-                  className="rounded border border-border bg-background/50 px-1.5 py-0.5 text-[9px] text-muted-foreground hover:bg-accent hover:text-foreground transition-all"
-                >
-                  Get API Keys
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSendFaq(undefined, "Which model fits my computer RAM?")}
-                  className="rounded border border-border bg-background/50 px-1.5 py-0.5 text-[9px] text-muted-foreground hover:bg-accent hover:text-foreground transition-all"
-                >
-                  Spec Guide
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSendFaq(undefined, "Explain Tier 1 Free Cloud AI")}
-                  className="rounded border border-border bg-background/50 px-1.5 py-0.5 text-[9px] text-muted-foreground hover:bg-accent hover:text-foreground transition-all"
-                >
-                  Free Tier
-                </button>
-              </div>
-
-              {/* Input box */}
-              <form onSubmit={handleSendFaq} className="flex gap-2 border-t border-border/40 pt-2.5 mt-1">
-                <input
-                  type="text"
-                  value={faqInput}
-                  onChange={(e) => setFaqInput(e.target.value)}
-                  placeholder="Ask a question..."
-                  className="flex-1 h-8 rounded border border-input bg-background px-2.5 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
-                />
-                <button
-                  type="submit"
-                  disabled={faqLoading || !faqInput.trim()}
-                  className="flex size-8 items-center justify-center rounded bg-primary text-primary-foreground hover:bg-primary/95 disabled:opacity-50 transition-colors"
-                >
-                  <Send className="size-3" />
-                </button>
-              </form>
-            </div>
-
-            <div className="rounded-lg glass-card glow-hover p-5 text-card-foreground shadow-lg flex flex-col gap-3">
-              <h3 className="text-sm font-semibold">Security & Keys</h3>
-              <p className="text-xs text-muted-foreground">
-                All cloud keys inputted in settings are stored locally on your device in your browser&apos;s private state, and forwarded securely to server routes.
-              </p>
-              <div className="rounded bg-muted/40 p-3 border-l-2 border-primary text-xs leading-5 text-muted-foreground flex items-start gap-2">
-                <Key className="size-4 text-primary shrink-0 mt-0.5" />
-                <span>No API keys are logged or persisted on server filesystems.</span>
-              </div>
-            </div>
-
-
-
-            <div className="rounded-lg glass-card glow-hover p-5 text-card-foreground shadow-lg flex flex-col gap-3">
-              <h3 className="text-sm font-semibold">Status Monitoring</h3>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="size-2 rounded-full bg-green-500 animate-pulse" />
-                <span className="text-muted-foreground">Local Ollama Status:</span>
-                <span className="font-semibold text-green-600">Active</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="size-2 rounded-full bg-green-500" />
-                <span className="text-muted-foreground">Cloud Engine Tiers:</span>
-                <span className="font-semibold text-green-600">Connected</span>
-              </div>
-            </div>
-          </aside>
+          
         </div>
       </div>
     </AppShell>

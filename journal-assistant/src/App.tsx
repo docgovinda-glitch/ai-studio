@@ -426,7 +426,7 @@ function App() {
                 value={project.aiSettings?.provider === "openai" ? (project.aiSettings?.openaiModel || "gpt-4o") : "gemini"}
                 onChange={(e) => {
                   const val = e.target.value;
-                  let updatedSettings = { ...project.aiSettings };
+                  const updatedSettings = { ...project.aiSettings };
                   if (val === "gemini") {
                     updatedSettings.provider = "gemini";
                   } else {

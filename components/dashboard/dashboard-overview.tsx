@@ -5,7 +5,7 @@ import {
   FileText,
   FolderKanban,
   Image,
-  PenLine,
+  BookOpen,
   Rocket,
 } from "lucide-react";
 
@@ -25,10 +25,10 @@ const workflowCards = [
     icon: FolderKanban,
   },
   {
-    title: "Writing Studio",
+    title: "Journal Studio",
     description:
-      "Draft scripts, articles, captions, briefs, and long-form content with AI assistance.",
-    icon: PenLine,
+      "Conduct in-depth academic research, draft structured journals, and manage papers powered by the Doctoral Research Assistant.",
+    icon: BookOpen,
   },
   {
     title: "Voice Studio",

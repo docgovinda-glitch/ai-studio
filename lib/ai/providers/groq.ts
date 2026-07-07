@@ -125,5 +125,103 @@ export function createGroqProvider(): AiProvider {
         clearTimeout(timeout);
       }
     },
+
+    async generateTextStream(
+      request: AiGenerateTextRequest
+    ): Promise<ReadableStream> {
+      const apiKey = request.apiKey ?? process.env.GROQ_API_KEY;
+
+      if (!apiKey || !apiKey.trim()) {
+        throw new AiProviderUnavailableError(
+          "Groq API key is missing. Set it in Settings to enable this cloud provider."
+        );
+      }
+
+      const model = request.model ?? defaultModel;
+
+      if (request.messages.length === 0) {
+        throw new AiValidationError("At least one chat message is required.");
+      }
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+      if (request.signal) {
+        request.signal.addEventListener("abort", () => controller.abort(), {
+          once: true,
+        });
+      }
+
+      const response = await fetch(BASE_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey.trim()}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          messages: request.messages,
+          temperature: request.temperature ?? 0.7,
+          max_tokens: request.maxTokens,
+          stream: true,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        if (response.status === 429) {
+          throw new AiProviderUnavailableError(
+            "Groq rate limit or quota exceeded (HTTP 429)."
+          );
+        }
+        const errText = await response.text();
+        throw new AiProviderRequestError(
+          `Groq returned HTTP ${response.status}: ${errText}`,
+          response.status
+        );
+      }
+
+      if (!response.body) {
+        throw new AiProviderRequestError(
+          "Groq API did not return a response body.",
+          500
+        );
+      }
+
+      // Create a transform stream to convert OpenAI-compatible streaming format
+      const transformStream = new TransformStream({
+        transform(chunk, controller) {
+          try {
+            const text = new TextDecoder().decode(chunk);
+            const lines = text.split("\n").filter((line) => line.trim());
+
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                const data = line.slice(6);
+                if (data === "[DONE]") {
+                  controller.terminate();
+                  return;
+                }
+                try {
+                  const parsed = JSON.parse(data);
+                  const content = parsed.choices?.[0]?.delta?.content;
+                  if (content) {
+                    controller.enqueue(new TextEncoder().encode(content));
+                  }
+                } catch {
+                  controller.enqueue(chunk);
+                }
+              }
+            }
+          } catch (error) {
+            controller.error(error);
+          }
+        }
+      });
+
+      return response.body.pipeThrough(transformStream);
+    },
   };
 }

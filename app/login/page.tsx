@@ -4,8 +4,9 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Mail, Key, Phone, User, AlertCircle, Check, Search, Sparkles, Camera } from "lucide-react";
 import { AuthCard } from "@/components/AuthCard";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
-
+import { signIn } from "next-auth/react";
 interface UserProfile {
   firstName: string;
   middleName?: string;
@@ -20,6 +21,7 @@ interface UserProfile {
   role: "user" | "admin";
   preferredModel?: string;
   faceVerified?: boolean;
+  approved?: boolean;
 }
 
 export default function LoginPage() {
@@ -58,6 +60,7 @@ export default function LoginPage() {
           password: "admin",
           role: "admin",
           preferredModel: "google/gemma-2-9b-it:free",
+          approved: true,
         };
         localStorage.setItem("everest_registered_users", JSON.stringify([adminUser]));
       }
@@ -84,58 +87,23 @@ export default function LoginPage() {
       return;
     }
 
+    if (matched.role !== "admin" && matched.approved === false) {
+      setError("Your account is pending administrator approval.");
+      return;
+    }
+
     localStorage.setItem("is_authenticated", "true");
     localStorage.setItem("current_user", JSON.stringify(matched));
     localStorage.setItem("current_user_role", matched.role);
 
-    setSuccess("Login successful!");
+    setSuccess("Login successful! Redirecting to AI Settings...");
     setTimeout(() => {
-      if (matched.role === "admin") {
-        router.push("/admin");
-      } else {
-        router.push("/ai-control");
-      }
+      router.push("/settings");
     }, 800);
   };
 
-  const handleSocialLogin = (platform: "google" | "facebook" | "github") => {
-    setError("");
-    setSuccess(`Connecting to ${platform}...`);
-
-    setTimeout(() => {
-      const socialUser: UserProfile = {
-        firstName: `${platform.charAt(0).toUpperCase() + platform.slice(1)}`,
-        lastName: "User",
-        email: `guest@${platform}.com`,
-        phone: "+1 (555) 000-0000",
-        photo: "",
-        role: "user",
-        preferredModel: "gpt-4o-mini",
-        countryCode: "+1",
-      };
-
-      const usersRaw = localStorage.getItem("everest_registered_users");
-      const users: UserProfile[] = usersRaw ? JSON.parse(usersRaw) : [];
-      if (!users.some((u) => u.email === socialUser.email)) {
-        users.push(socialUser);
-        localStorage.setItem("everest_registered_users", JSON.stringify(users));
-      }
-
-      localStorage.setItem("is_authenticated", "true");
-      localStorage.setItem("current_user", JSON.stringify(socialUser));
-      localStorage.setItem("current_user_role", socialUser.role);
-
-      setSuccess("Authentication successful!");
-      setTimeout(() => {
-        if (socialUser.role === "admin") {
-          router.push("/admin");
-        } else {
-          router.push("/ai-control");
-        }
-      }, 800);
-    }, 1200);
-  };
-
+// OAuth login handled by NextAuth. The signIn function is called directly from the buttons.
+    
   const handleSignup = (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -166,85 +134,101 @@ export default function LoginPage() {
       role: "user",
       preferredModel,
       countryCode,
+      approved: false, // Must be approved by administrator
     };
 
     users.push(newUser);
     localStorage.setItem("everest_registered_users", JSON.stringify(users));
 
-    localStorage.setItem("is_authenticated", "true");
-    localStorage.setItem("current_user", JSON.stringify(newUser));
-    localStorage.setItem("current_user_role", "user");
-
-    setSuccess("Onboarding complete! Creating workspace...");
+    setSuccess("Account created! Awaiting administrator approval.");
     setTimeout(() => {
-      router.push("/ai-control");
-    }, 1000);
+      setActiveTab("login");
+      setSuccess("");
+    }, 2000);
   };
 
   return (
-    <AuthCard title={activeTab === "login" ? "Sign In" : "Create Account"}>
-      <div className="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+    <div className="relative min-h-screen flex items-center justify-center bg-gradient-to-br from-[var(--color-bg)] to-[var(--color-bg-light)]">
+      {/* Background Image */}
+      <Image
+          src="/everest_background.png"
+          alt="Mount Everest"
+          fill
+          className="object-cover -z-10"
+          priority
+        />
+      <AuthCard title={activeTab === "login" ? "Sign In" : "Create Account"}>
+        <div className="absolute top-1/4 left-1/4 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-1/4 right-1/4 translate-x-1/2 translate-y-1/2 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="flex flex-col items-center text-center gap-3 pb-4">
-        <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
-          <Sparkles className="size-5 text-foreground animate-pulse" />
+        <div className="flex flex-col items-center text-center gap-3 pb-4">
+          <div className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-lg shadow-primary/20">
+            <Sparkles className="size-5 text-foreground animate-pulse" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight sm:text-2xl text-foreground">Everest AI Assistant</h1>
+            <p className="text-xs text-muted-foreground mt-1">Unified Local &amp; Cloud AI Workspace</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-xl font-bold tracking-tight sm:text-2xl text-foreground">Everest AI Assistant</h1>
-          <p className="text-xs text-muted-foreground mt-1">Unified Local &amp; Cloud AI Workspace</p>
-        </div>
-      </div>
 
-      <div className="flex flex-col items-center mb-4">
-        <div className="relative group">
-          <img
-            src={profilePhoto}
-            alt="Profile"
-            className="size-20 rounded-full object-cover border-2 border-border shadow-md"
-          />
-          <label
-            htmlFor="profile-upload"
-            className="absolute bottom-0 right-0 flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg cursor-pointer hover:scale-110 transition-transform"
+        <div className="flex flex-col items-center mb-4">
+          <div className="relative group">
+            <img
+              src={profilePhoto}
+              alt="Profile"
+              className="size-20 rounded-full object-cover border-2 border-border shadow-md"
+            />
+            <label
+              htmlFor="profile-upload"
+              className="absolute bottom-0 right-0 flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg cursor-pointer hover:scale-110 transition-transform"
+            >
+              <Camera className="size-3.5" />
+            </label>
+            <input
+              id="profile-upload"
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  const reader = new FileReader();
+                  reader.onloadend = () => setProfilePhoto(reader.result as string);
+                  reader.readAsDataURL(file);
+                }
+              }}
+            />
+          </div>
+          <p className="text-[10px] text-muted-foreground mt-1.5">Tap to upload photo</p>
+        </div>
+
+        <div className="grid grid-cols-3 bg-muted/60 p-1 rounded-lg border border-border/30 mb-6">
+          <button
+            type="button"
+            onClick={() => { setActiveTab("login"); setError(""); }}
+            className={`py-1.5 text-xs font-semibold rounded-md transition-all ${
+              activeTab === "login" ? "bg-background text-foreground shadow" : "text-muted-foreground hover:text-foreground"
+            }`}
           >
-            <Camera className="size-3.5" />
-          </label>
-          <input
-            id="profile-upload"
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) {
-                const reader = new FileReader();
-                reader.onloadend = () => setProfilePhoto(reader.result as string);
-                reader.readAsDataURL(file);
-              }
-            }}
-          />
+            Sign In
+          </button>
+          <button
+            type="button"
+            onClick={() => { setActiveTab("signup"); setError(""); }}
+            className={`py-1.5 text-xs font-semibold rounded-md transition-all ${
+              activeTab === "signup" ? "bg-background text-foreground shadow" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Create Account
+          </button>
+          <button
+            type="button"
+            onClick={() => { router.push("/admin/login"); }}
+            className="py-1.5 text-xs font-semibold rounded-md transition-all text-muted-foreground hover:text-foreground"
+          >
+            Admin Login
+          </button>
         </div>
-        <p className="text-[10px] text-muted-foreground mt-1.5">Tap to upload photo</p>
-      </div>
-
-      <div className="grid grid-cols-2 bg-muted/60 p-1 rounded-lg border border-border/30 mb-6">
-        <button
-          onClick={() => { setActiveTab("login"); setError(""); }}
-          className={`py-1.5 text-xs font-semibold rounded-md transition-all ${
-            activeTab === "login" ? "bg-background text-foreground shadow" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Sign In
-        </button>
-        <button
-          onClick={() => { setActiveTab("signup"); setError(""); }}
-          className={`py-1.5 text-xs font-semibold rounded-md transition-all ${
-            activeTab === "signup" ? "bg-background text-foreground shadow" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          Create Account
-        </button>
-      </div>
 
       {error && (
         <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-lg text-xs mb-4 animate-in fade-in duration-200">
@@ -307,7 +291,16 @@ export default function LoginPage() {
           <div className="grid grid-cols-3 gap-2">
             <button
               type="button"
-              onClick={() => handleSocialLogin("google")}
+              onClick={async () => {
+                try {
+                  const res = await signIn("google", { redirect: false });
+                  if (res?.error) {
+                    setError("Google sign-in is not configured. Ask your admin to add Google OAuth credentials.");
+                  }
+                } catch {
+                  setError("Google sign-in is not configured. Ask your admin to add Google OAuth credentials.");
+                }
+              }}
               className="flex h-9 items-center justify-center rounded-lg border border-border bg-background/50 hover:bg-accent/40 text-muted-foreground hover:text-foreground transition-all gap-1.5 text-xs font-semibold"
             >
               <Search className="size-3.5 text-red-500" />
@@ -315,7 +308,16 @@ export default function LoginPage() {
             </button>
             <button
               type="button"
-              onClick={() => handleSocialLogin("facebook")}
+              onClick={async () => {
+                try {
+                  const res = await signIn("facebook", { redirect: false });
+                  if (res?.error) {
+                    setError("Facebook sign-in is not configured. Ask your admin to add Facebook OAuth credentials.");
+                  }
+                } catch {
+                  setError("Facebook sign-in is not configured. Ask your admin to add Facebook OAuth credentials.");
+                }
+              }}
               className="flex h-9 items-center justify-center rounded-lg border border-border bg-background/50 hover:bg-accent/40 text-muted-foreground hover:text-foreground transition-all gap-1.5 text-xs font-semibold"
             >
               <AlertCircle className="size-3.5 text-blue-600" />
@@ -323,7 +325,16 @@ export default function LoginPage() {
             </button>
             <button
               type="button"
-              onClick={() => handleSocialLogin("github")}
+              onClick={async () => {
+                try {
+                  const res = await signIn("github", { redirect: false });
+                  if (res?.error) {
+                    setError("GitHub sign-in is not configured. Ask your admin to add GitHub OAuth credentials.");
+                  }
+                } catch {
+                  setError("GitHub sign-in is not configured. Ask your admin to add GitHub OAuth credentials.");
+                }
+              }}
               className="flex h-9 items-center justify-center rounded-lg border border-border bg-background/50 hover:bg-accent/40 text-muted-foreground hover:text-foreground transition-all gap-1.5 text-xs font-semibold"
             >
               <User className="size-3.5" />
@@ -442,5 +453,6 @@ export default function LoginPage() {
         </form>
       )}
     </AuthCard>
+    </div>
   );
 }

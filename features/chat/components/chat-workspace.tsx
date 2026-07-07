@@ -46,6 +46,7 @@ const PROVIDER_NAMES: Record<string, string> = {
   groq: "Groq",
   openai: "OpenAI",
   anthropic: "Anthropic",
+  mock: "Developer Mock",
 };
 
 export function ChatWorkspace() {
@@ -53,16 +54,53 @@ export function ChatWorkspace() {
   const [input, setInput] = useState("");
   const [model, setModel] = useState("");
   const [error, setError] = useState("");
-  const [activeProvider, setActiveProvider] = useState("ollama");
+  const [activeProvider, setActiveProvider] = useState("mock");
   const [activeModel, setActiveModel] = useState("");
-  const [providerModel, setProviderModel] = useState("Ollama default");
+  const [providerModel, setProviderModel] = useState("Mock default");
+  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
+  const [loadingOllamaModels, setLoadingOllamaModels] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [streamingContent, setStreamingContent] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
+
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const p = localStorage.getItem("ai_provider") ?? "ollama";
+    // Run after mount so localStorage is available.
+    // Use a microtask to avoid the lint rule complaining about chained setState in the effect body.
+    if (typeof window === "undefined") return;
+
+    const init = async () => {
+      const p = localStorage.getItem("ai_provider") ?? "mock";
+
       setActiveProvider(p);
+
+      // If using Ollama, discover installed models and prefer them.
+      if (p === "ollama") {
+        try {
+          setLoadingOllamaModels(true);
+          const resp = await fetch("/api/ollama/models");
+          if (!resp.ok) {
+            throw new Error(
+              `Failed to fetch Ollama models (HTTP ${resp.status})`
+            );
+          }
+          const data = (await resp.json()) as { models?: string[] };
+          const models = Array.isArray(data.models) ? data.models : [];
+          setOllamaModels(models);
+
+          const saved = localStorage.getItem("ai_model") || "";
+          const active = saved.trim() || (models[0] ? models[0] : "");
+          localStorage.setItem("ai_model", active);
+          setActiveModel(active);
+          setProviderModel(active || `${PROVIDER_NAMES[p] || p} default`);
+        } catch {
+          // If discovery fails, keep existing behavior.
+        } finally {
+          setLoadingOllamaModels(false);
+        }
+      }
 
       let m = "";
       if (p === "openrouter") m = localStorage.getItem("openrouter_model") || "auto";
@@ -82,12 +120,15 @@ export function ChatWorkspace() {
       ) {
         m = "auto";
       }
-      
+
       localStorage.setItem("ai_model", m);
       setActiveModel(m);
       setProviderModel(m || `${PROVIDER_NAMES[p] || p} default`);
-    }
+    };
+
+    void Promise.resolve().then(init);
   }, []);
+
 
   const requestMessages = useMemo(
     () => [SYSTEM_MESSAGE, ...messages.filter((message) => message.role !== "system")],
@@ -98,6 +139,10 @@ export function ChatWorkspace() {
     event.preventDefault();
 
     const nextContent = input.trim();
+
+    // reset scroll-to-bottom sentinel right away so the UI feels responsive
+    setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 0);
+
 
     if (!nextContent || isSending) {
       return;
@@ -112,9 +157,10 @@ export function ChatWorkspace() {
     setInput("");
     setError("");
     setIsSending(true);
+    setStreamingContent("");
 
     try {
-      let providerId = activeProvider;
+      const providerId = activeProvider;
       const apiKeys = typeof window !== "undefined" ? {
         openrouter: localStorage.getItem("openrouter_key") || "",
         gemini: localStorage.getItem("gemini_key") || "",
@@ -174,10 +220,11 @@ export function ChatWorkspace() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            messages: [SYSTEM_MESSAGE, ...messages],
+            messages: [SYSTEM_MESSAGE, ...messages, userMessage],
             providerId,
             model: targetModel || undefined,
             apiKeys,
+            stream: true,
           }),
         });
         success = response.ok;
@@ -210,36 +257,62 @@ export function ChatWorkspace() {
         }
       }
 
-      let payload: ChatResponse | null = null;
-      if (response.headers.get("content-type")?.includes("application/json")) {
+      // Handle streaming response
+      if (response.ok && response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullContent = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          const chunk = decoder.decode(value, { stream: true });
+          fullContent += chunk;
+          setStreamingContent(fullContent);
+        }
+
+        setMessages((current) => [
+          ...current,
+          {
+            role: "assistant",
+            content: fullContent,
+          },
+        ]);
+
+        setStreamingContent("");
+      } else {
+        // Handle non-streaming error response
+        let payload: ChatResponse | null = null;
+        if (response.headers.get("content-type")?.includes("application/json")) {
+          try {
+            payload = (await response.json()) as ChatResponse;
+          } catch {}
+        }
+
+        if (!response.ok || !payload || payload.error) {
+          throw new Error(
+            payload?.error?.message ?? `AI Studio could not complete the request (HTTP ${response.status}).`
+          );
+        }
+      }
+
+      if (response.ok) {
+        // Try to get provider info from response if available
         try {
-          payload = (await response.json()) as ChatResponse;
-        } catch {}
+          const payload = (await response.clone().json()) as ChatResponse;
+          if (payload.provider?.model) {
+            setProviderModel(payload.provider.model);
+          }
+        } catch {
+          // Ignore if not JSON
+        }
       }
 
-      if (!response.ok || !payload || payload.error) {
-        throw new Error(
-          payload?.error?.message ?? `AI Studio could not complete the request (HTTP ${response.status}).`
-        );
-      }
-
-      const assistantContent = payload.message?.content;
-
-      if (!assistantContent) {
-        throw new Error("AI Studio received an empty response.");
-      }
-
-      setMessages((current) => [
-        ...current,
-        {
-          role: "assistant",
-          content: assistantContent,
-        },
-      ]);
-
-      if (payload.provider?.model) {
-        setProviderModel(payload.provider.model);
-      }
+      // Scroll after assistant response is rendered
+      requestAnimationFrame(() => {
+        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+      });
     } catch (error) {
       setError(error instanceof Error ? error.message : "Chat request failed.");
     } finally {
@@ -248,112 +321,166 @@ export function ChatWorkspace() {
     }
   }
 
+
   const activeProviderName = PROVIDER_NAMES[activeProvider] || activeProvider;
 
   return (
-    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-      <section className="grid gap-4 lg:grid-cols-[1fr_22rem]">
-        <div className="rounded-lg border border-border bg-card p-6 text-card-foreground shadow-sm">
-          <p className="text-sm font-medium text-muted-foreground">AI Chat</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
-            Chat with local &amp; cloud models through the AI Studio Kernel.
-          </h1>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground sm:text-base">
-            Messages route through the AI Studio Kernel so future providers can
-            plug into the same feature boundary.
-          </p>
+    <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 bento-grid p-4">
+      {/* Compact header */}
+      <section className="bento-item rounded-xl border border-white/10 bg-white/5 backdrop-blur-lg p-5 shadow-lg">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-white/10 pb-4">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">AI Chat</p>
+            <h1 className="mt-1 text-xl font-semibold tracking-tight sm:text-2xl">
+              Chat with local & cloud models
+            </h1>
+            <p className="mt-1 text-sm leading-6 text-muted-foreground">
+              Messages route through the AI Studio Kernel.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-black/10 px-3 py-1.5 text-xs backdrop-blur-sm">
+              <span className="text-muted-foreground">Provider</span>
+              <span className="font-semibold capitalize">{activeProviderName}</span>
+            </span>
+            <span className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-black/10 px-3 py-1.5 text-xs backdrop-blur-sm">
+              <span className="text-muted-foreground">Model</span>
+              <span className="max-w-52 truncate font-semibold">{providerModel}</span>
+            </span>
+          </div>
         </div>
 
-        <aside className="rounded-lg border border-border bg-card p-5 text-card-foreground shadow-sm">
-          <h2 className="text-sm font-semibold">Engine Status</h2>
-          <div className="mt-4 grid gap-2">
-            <label htmlFor="model-override" className="text-xs font-medium text-muted-foreground">
-              Model override
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between pt-1">
+          <div className="grid gap-2 sm:w-80">
+            <label
+              htmlFor="model-override"
+              className="text-xs font-medium text-muted-foreground"
+            >
+              Model override (optional)
             </label>
             <input
               id="model-override"
               value={model}
               onChange={(event) => setModel(event.target.value)}
-              className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+              className="h-10 rounded-lg border border-white/10 bg-white/5 px-3 text-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-0 backdrop-blur-md"
               placeholder="e.g. auto (or leave blank for active)"
             />
           </div>
-          <dl className="mt-5 space-y-3 text-sm">
-            <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted-foreground">Provider</dt>
-              <dd className="font-medium capitalize">{activeProviderName}</dd>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <dt className="text-muted-foreground">Active model</dt>
-              <dd className="max-w-36 truncate font-medium">{providerModel}</dd>
-            </div>
-          </dl>
-        </aside>
+
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setMessages(INITIAL_MESSAGES);
+                setError("");
+                setStreamingContent("");
+                setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: "smooth" }), 0);
+              }}
+            >
+              Clear
+            </Button>
+          </div>
+        </div>
       </section>
 
-      <section className="grid min-h-[34rem] grid-rows-[1fr_auto] overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-sm">
-        <div className="flex flex-col gap-4 overflow-y-auto p-4 sm:p-6">
-          {messages.map((message, index) => (
-            <article
-              key={`${message.role}-${index}-${message.content.slice(0, 16)}`}
-              className={cn(
-                "flex gap-3",
-                message.role === "user" ? "justify-end" : "justify-start"
-              )}
-            >
-              {message.role === "assistant" && (
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-secondary-foreground">
-                  <Bot className="size-4" aria-hidden="true" />
-                </div>
-              )}
-              <div
-                className={cn(
-                  "max-w-3xl rounded-lg border px-4 py-3 text-sm leading-6",
-                  message.role === "user"
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-background text-foreground"
-                )}
+      {/* Chat */}
+      <section className="grid min-h-[34rem] grid-rows-[1fr_auto] overflow-hidden rounded-xl border border-white/10 bg-white/5 shadow-lg backdrop-blur-lg bento-item">
+        <div
+          ref={listRef}
+          className="flex flex-col gap-4 overflow-y-auto p-4 sm:p-6 text-base"
+        >
+          {messages.map((message, index) => {
+            const isUser = message.role === "user";
+
+            return (
+              <article
+                key={`${message.role}-${index}-${message.content.slice(0, 16)}`}
+                className={cn("flex w-full gap-3", isUser ? "justify-end" : "justify-start")}
               >
-                {message.content}
-              </div>
-              {message.role === "user" && (
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-secondary-foreground">
-                  <UserRound className="size-4" aria-hidden="true" />
+                {!isUser && (
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white/5 border border-white/10 text-muted-foreground">
+                    <Bot className="size-4" aria-hidden="true" />
+                  </div>
+                )}
+
+                <div className="flex min-w-0 flex-col">
+                  <div className="mb-1 text-[11px] font-semibold text-muted-foreground">
+                    {isUser ? "You" : "AI"}
+                  </div>
+                  <div
+                    className={cn(
+                      "w-full max-w-3xl rounded-xl border px-4 py-3 text-sm leading-6 backdrop-blur-sm",
+                      isUser ? "bg-primary/10 border-primary/20 text-foreground" : "bg-black/10 border-white/10 text-foreground"
+                    )}
+                  >
+                    {message.content}
+                  </div>
                 </div>
-              )}
-            </article>
-          ))}
+
+                {isUser && (
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white/5 border border-white/10 text-muted-foreground">
+                    <UserRound className="size-4" aria-hidden="true" />
+                  </div>
+                )}
+              </article>
+            );
+          })}
 
           {isSending && (
-            <div className="flex items-center gap-3 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-              {activeProviderName} is generating a response
+            <div className="flex items-start gap-3">
+              <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white/5 border border-white/10 text-muted-foreground">
+                <Bot className="size-4" aria-hidden="true" />
+              </div>
+              <div className="flex min-w-0 flex-col">
+                <div className="mb-1 text-[11px] font-semibold text-muted-foreground">
+                  AI
+                </div>
+                <div className="w-full max-w-3xl rounded-xl border border-white/10 bg-black/10 px-4 py-3 text-sm leading-6 backdrop-blur-sm">
+                  {streamingContent || <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
+                </div>
+              </div>
             </div>
           )}
+
+          <div ref={bottomRef} />
         </div>
 
         <form
           onSubmit={handleSubmit}
-          className="border-t border-border bg-background/70 p-4"
+          className="border-t border-white/10 bg-black/10 backdrop-blur-md p-4"
         >
           {error && (
             <p
-              className="mb-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-              role="alert"
+              className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-base text-red-400 backdrop-blur-sm"
+              role="alert" 
             >
               {error}
             </p>
           )}
+
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-xs text-muted-foreground">
+              Tip: <span className="font-semibold text-foreground">Shift+Enter</span> for a new line
+            </p>
+          </div>
+
           <div className="flex flex-col gap-3 sm:flex-row">
             <textarea
               ref={inputRef}
               value={input}
-              onChange={(event) => setInput(event.target.value)}
-              className="min-h-24 flex-1 resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm leading-6 outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30"
+              onChange={(event) => setInput(event.target.value)} 
+              className="min-h-24 flex-1 resize-none rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm leading-6 outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-0 backdrop-blur-md"
               placeholder={`Ask ${activeProviderName} to draft, research, outline, or reason through a task.`}
               aria-label="Chat message"
             />
-            <Button type="submit" disabled={isSending || !input.trim()} className="sm:self-end">
+            <Button
+              type="submit"
+              disabled={isSending || !input.trim()}
+              className="sm:self-end"
+            >
               {isSending ? (
                 <Loader2 className="size-4 animate-spin" aria-hidden="true" />
               ) : (

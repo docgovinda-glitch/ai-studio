@@ -5,10 +5,10 @@ import {
   FolderKanban,
   Image,
   LayoutDashboard,
-  PenLine,
   Settings,
   Video,
   ShieldCheck,
+  BookOpen,
 } from "lucide-react";
 
 export type NavigationItem = {
@@ -35,11 +35,6 @@ export const navigationItems: NavigationItem[] = [
     icon: FolderKanban,
   },
   {
-    title: "Writing Studio",
-    href: "/writing",
-    icon: PenLine,
-  },
-  {
     title: "Voice Studio",
     href: "/voice",
     icon: AudioLines,
@@ -55,6 +50,11 @@ export const navigationItems: NavigationItem[] = [
     icon: Video,
   },
   {
+    title: "Journal Studio",
+    href: "/journal-assistant",
+    icon: BookOpen,
+  },
+  {
     title: "Settings",
     href: "/settings",
     icon: Settings,
@@ -66,3 +66,4 @@ export const navigationItems: NavigationItem[] = [
     isAdminOnly: true,
   },
 ];
+

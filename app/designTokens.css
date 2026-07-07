@@ -1,14 +1,16 @@
 :root {
-  --color-bg: #0f0f0f;
-  --color-bg-light: #1a1a1a;
+  /* Off-white base to match the global off-white theme */
+  --color-bg: #f6f3ef;
+  --color-bg-light: #fbfaf8;
   --color-accent-start: #ff6b6b;
   --color-accent-end: #f7b801;
-  --color-primary: #ffffff;
-  --color-muted: #9ca3af;
+  --color-primary: #0f172a;
+  --color-muted: #475569;
   --font-primary: 'Inter', sans-serif;
   --radius-card: 1rem;
-  --shadow-card: 0 4px 6px rgba(0,0,0,0.3);
+  --shadow-card: 0 10px 30px -18px rgba(15, 23, 42, 0.25);
 }
+
 
 /* Global resets */
 html, body {

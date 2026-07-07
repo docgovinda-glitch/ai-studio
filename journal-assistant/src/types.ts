@@ -223,9 +223,28 @@ export interface PaperProject {
   dataSources?: DiscoveredDataSource[];
   targetJournal?: RecommendJournal;
   complianceRules?: ComplianceRules;
+
+  // Drafted sections (prose)
   sections: Record<string, string>; // Maps section keys e.g. "Abstract" to drafted text
+
+  // Academic accountability toggle + per-section provenance
+  confidenceSourceMode?: "confidence" | "source" | "both";
+  sectionProvenance?: Record<
+    string,
+    {
+      confidence?: number; // 0-100
+      confidenceRationale?: string;
+      sourcesUsed?: string[]; // extracted citations / provenance strings
+      citationsUsed?: string[]; // optional alias for future compatibility
+      lastGeneratedAt?: string;
+      lastProvider?: string;
+      fromFallback?: boolean;
+    }
+  >;
+
   qcReport?: QCReport;
   submissionPack?: SubmissionPack;
+
 
   // New Analytics & Tracking fields
   usageLogs?: Array<{

@@ -5,7 +5,7 @@ export type AiTextMessage = {
   content: string;
 };
 
-export type AiCapability = "chat";
+export type AiCapability = "chat" | "image" | "voice" | "video";
 
 export type AiProviderMetadata = {
   id: string;
@@ -35,11 +35,67 @@ export type AiGenerateTextResponse = {
   metadata?: Record<string, string | number | boolean>;
 };
 
+export type AiGenerateImageRequest = {
+  prompt: string;
+  model?: string;
+  size?: string;
+  style?: string;
+  quality?: string;
+  signal?: AbortSignal;
+  apiKey?: string;
+};
+
+export type AiGenerateImageResponse = {
+  providerId: string;
+  model: string;
+  imageUrl?: string;
+  imageBase64?: string;
+  metadata?: Record<string, string | number | boolean>;
+};
+
 export type AiProvider = AiProviderMetadata & {
   generateText(request: AiGenerateTextRequest): Promise<AiGenerateTextResponse>;
+  generateTextStream?(request: AiGenerateTextRequest): Promise<ReadableStream>;
+  generateImage?(request: AiGenerateImageRequest): Promise<AiGenerateImageResponse>;
 };
 
 export type AiKernelGenerateTextRequest = AiGenerateTextRequest & {
   providerId?: string;
   apiKeys?: Record<string, string>;
+};
+
+// Voice types
+export type AiGenerateVoiceRequest = {
+  text: string;
+  voice?: string;
+  speed?: number;
+  pitch?: number;
+  format?: string;
+  signal?: AbortSignal;
+  apiKey?: string;
+};
+
+export type AiGenerateVoiceResponse = {
+  providerId: string;
+  model: string;
+  audioUrl?: string;
+  audioBase64?: string;
+  metadata?: Record<string, string | number | boolean>;
+};
+
+// Video types
+export type AiGenerateVideoRequest = {
+  prompt: string;
+  duration?: number;
+  style?: string;
+  model?: string;
+  signal?: AbortSignal;
+  apiKey?: string;
+};
+
+export type AiGenerateVideoResponse = {
+  providerId: string;
+  model: string;
+  videoUrl?: string;
+  metadata?: Record<string, string | number | boolean>;
 };

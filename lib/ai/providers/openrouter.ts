@@ -111,7 +111,8 @@ export function createOpenRouterProvider(): AiProvider {
 
       for (const targetModel of modelsToTry) {
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+        // Optimize failover: use a shorter 8s timeout for individual free tier model rotation
+        const timeout = setTimeout(() => controller.abort(), 8_000);
 
         if (request.signal) {
           request.signal.addEventListener("abort", () => controller.abort(), {
@@ -189,6 +190,117 @@ export function createOpenRouterProvider(): AiProvider {
       }
 
       throw lastError ?? new AiProviderRequestError("All OpenRouter free tier models failed to generate response.", 500);
+    },
+
+    async generateTextStream(
+      request: AiGenerateTextRequest
+    ): Promise<ReadableStream> {
+      const apiKey = request.apiKey ?? process.env.OPENROUTER_API_KEY;
+
+      if (!apiKey || !apiKey.trim()) {
+        throw new AiProviderUnavailableError(
+          "OpenRouter API key is missing. Set it in Settings to enable this cloud provider."
+        );
+      }
+
+      if (request.messages.length === 0) {
+        throw new AiValidationError("At least one chat message is required.");
+      }
+
+      let requestedModel = request.model ?? defaultModel;
+      if (
+        requestedModel === "lynn/soliloquy-l2-13b:free" ||
+        requestedModel === "intel/neural-chat-7b-v3-1:free" ||
+        requestedModel === "huggingfaceh4/zephyr-7b-beta:free" ||
+        requestedModel === "openchat/openchat-7b:free" ||
+        requestedModel === "undi95/toppy-m-7b:free" ||
+        requestedModel === "deepseek/deepseek-r1:free"
+      ) {
+        requestedModel = "auto";
+      }
+
+      // For streaming, we use the primary model directly
+      const targetModel = requestedModel === "auto" ? "openrouter/free" : requestedModel;
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8_000);
+
+      if (request.signal) {
+        request.signal.addEventListener("abort", () => controller.abort(), {
+          once: true,
+        });
+      }
+
+      const response = await fetch(BASE_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey.trim()}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": "https://ai-studio.operating-system",
+          "X-Title": "AI Studio OS",
+        },
+        body: JSON.stringify({
+          model: targetModel,
+          messages: request.messages.map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+          temperature: request.temperature ?? 0.7,
+          max_tokens: request.maxTokens,
+          stream: true,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new AiProviderRequestError(
+          `OpenRouter returned HTTP ${response.status} for model "${targetModel}": ${errText}`,
+          response.status
+        );
+      }
+
+      if (!response.body) {
+        throw new AiProviderRequestError(
+          "OpenRouter API did not return a response body.",
+          500
+        );
+      }
+
+      // Create a transform stream to convert OpenAI-compatible streaming format
+      const transformStream = new TransformStream({
+        transform(chunk, controller) {
+          try {
+            const text = new TextDecoder().decode(chunk);
+            const lines = text.split("\n").filter((line) => line.trim());
+
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                const data = line.slice(6);
+                if (data === "[DONE]") {
+                  controller.terminate();
+                  return;
+                }
+                try {
+                  const parsed = JSON.parse(data);
+                  const content = parsed.choices?.[0]?.delta?.content;
+                  if (content) {
+                    controller.enqueue(new TextEncoder().encode(content));
+                  }
+                } catch {
+                  controller.enqueue(chunk);
+                }
+              }
+            }
+          } catch (error) {
+            controller.error(error);
+          }
+        }
+      });
+
+      return response.body.pipeThrough(transformStream);
     },
   };
 }

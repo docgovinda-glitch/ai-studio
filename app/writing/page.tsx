@@ -45,7 +45,7 @@ export default function WritingStudioPage() {
         },
       ];
 
-      let activeProvider = typeof window !== "undefined" ? localStorage.getItem("ai_provider") ?? "ollama" : "ollama";
+      const activeProvider = typeof window !== "undefined" ? localStorage.getItem("ai_provider") ?? "ollama" : "ollama";
       const apiKeys = typeof window !== "undefined" ? {
         openrouter: localStorage.getItem("openrouter_key") || "",
         gemini: localStorage.getItem("gemini_key") || "",

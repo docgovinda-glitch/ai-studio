@@ -12,10 +12,9 @@ import {
 } from "@/lib/ai/errors";
 
 
-
 const DEFAULT_OLLAMA_BASE_URL = "http://127.0.0.1:11434";
 const DEFAULT_OLLAMA_MODEL = "llama3.1";
-const DEFAULT_TIMEOUT_MS = 60_000;
+const DEFAULT_TIMEOUT_MS = 180_000;
 
 export function createOllamaProvider(): AiProvider {
   const defaultModel = process.env.OLLAMA_MODEL ?? DEFAULT_OLLAMA_MODEL;
@@ -90,7 +89,9 @@ export function createOllamaProvider(): AiProvider {
           );
         }
 
-        const errorStatus = response.status === 404 ? 400 : (response.status >= 500 ? 502 : response.status);
+        const errorStatus = response.status === 429
+          ? 429
+          : (response.status === 404 ? 400 : (response.status >= 500 ? 502 : response.status));
         throw new AiProviderRequestError(
           details || `Local engine "${engine}" returned HTTP ${response.status}.`,
           errorStatus
@@ -142,6 +143,127 @@ export function createOllamaProvider(): AiProvider {
           },
         };
       }
+    },
+
+    async generateTextStream(
+      request: AiGenerateTextRequest
+    ): Promise<ReadableStream> {
+      const model = request.model ?? defaultModel;
+
+      if (!model.trim()) {
+        throw new AiValidationError("A local model name is required.");
+      }
+
+      if (request.messages.length === 0) {
+        throw new AiValidationError("At least one chat message is required.");
+      }
+
+      const engine = request.apiKey || "ollama";
+      const isOllama = engine === "ollama";
+
+      const baseUrl = normalizeBaseUrl(
+        process.env.OLLAMA_BASE_URL ?? DEFAULT_OLLAMA_BASE_URL
+      );
+
+      const targetUrl = isOllama
+        ? `${baseUrl}/api/chat`
+        : `${baseUrl}/v1/chat/completions`;
+
+      const requestBody = isOllama
+        ? {
+            model,
+            messages: request.messages,
+            stream: true,
+            options: {
+              temperature: request.temperature,
+              num_predict: request.maxTokens,
+            },
+          }
+        : {
+            model,
+            messages: request.messages.map((m) => ({
+              role: m.role,
+              content: m.content,
+            })),
+            temperature: request.temperature,
+            max_tokens: request.maxTokens,
+            stream: true,
+          };
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS);
+
+      if (request.signal) {
+        request.signal.addEventListener("abort", () => controller.abort(), {
+          once: true,
+        });
+      }
+
+      const response = await fetch(targetUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        const details = await readProviderError(response);
+        throw new AiProviderRequestError(
+          details || `Local engine "${engine}" returned HTTP ${response.status}.`,
+          response.status
+        );
+      }
+
+      if (!response.body) {
+        throw new AiProviderRequestError("Local engine did not return a response body.");
+      }
+
+      // Create a transform stream to convert Ollama format to standard format
+      const transformStream = new TransformStream({
+        transform(chunk, controller) {
+          try {
+            const text = new TextDecoder().decode(chunk);
+            const lines = text.split("\n").filter((line) => line.trim());
+            
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                const data = line.slice(6);
+                if (data === "[DONE]") {
+                  controller.terminate();
+                  return;
+                }
+                try {
+                  const parsed = JSON.parse(data);
+                  if (isOllama) {
+                    // Ollama streaming format: { message: { content: "..." } }
+                    const content = parsed.message?.content;
+                    if (content) {
+                      controller.enqueue(new TextEncoder().encode(content));
+                    }
+                  } else {
+                    // OpenAI-compatible format: { choices: [{ delta: { content: "..." } }] }
+                    const content = parsed.choices?.[0]?.delta?.content;
+                    if (content) {
+                      controller.enqueue(new TextEncoder().encode(content));
+                    }
+                  }
+                } catch {
+                  // If not JSON, pass through
+                  controller.enqueue(chunk);
+                }
+              }
+            }
+          } catch (error) {
+            controller.error(error);
+          }
+        }
+      });
+
+      return response.body.pipeThrough(transformStream);
     },
   };
 }

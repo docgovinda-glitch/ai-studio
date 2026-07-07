@@ -1,7 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { navigationItems } from "@/components/layout/navigation";
+import {
+  Bot,
+  PenLine,
+  AudioLines,
+  Video,
+  FolderKanban,
+  Settings,
+  ShieldCheck,
+  Image as ImageIcon,
+  type LucideIcon,
+} from "lucide-react";
 import { NavigationLink } from "@/components/layout/navigation-link";
 
 type NavigationListProps = {
@@ -9,6 +19,17 @@ type NavigationListProps = {
 };
 
 export function NavigationList({ variant }: NavigationListProps) {
+  const navigationItems: { title: string; href: string; icon: LucideIcon; isAdminOnly?: boolean }[] = [
+    { title: "AI Chat", href: "/chat", icon: Bot },
+    { title: "Writing Studio", href: "/writing", icon: PenLine },
+    { title: "Image Studio", href: "/images", icon: ImageIcon },
+    { title: "Voice Studio", href: "/voice", icon: AudioLines },
+    { title: "Video Studio", href: "/video", icon: Video },
+    { title: "Projects", href: "/projects", icon: FolderKanban },
+    { title: "Settings", href: "/settings", icon: Settings },
+    { title: "Admin", href: "/admin", icon: ShieldCheck, isAdminOnly: true },
+  ];
+
   const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {

@@ -1,3 +1,4 @@
+// @ts-ignore
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
@@ -298,7 +299,7 @@ app.post("/api/parse-file", async (req, res) => {
       try {
         const xlsx = await import("xlsx");
         const workbook = xlsx.read(buffer, { type: "buffer" });
-        let csvs: string[] = [];
+        const csvs: string[] = [];
         workbook.SheetNames.forEach(sheetName => {
           const sheet = workbook.Sheets[sheetName];
           csvs.push(xlsx.utils.sheet_to_csv(sheet));
@@ -596,7 +597,7 @@ app.post("/api/generate", async (req, res) => {
         return res.status(400).json({ error: "OpenAI API Key is required." });
       }
 
-      let messages = [
+      const messages = [
         { role: "system", content: systemInstruction || "You are a helpful assistant." },
         { role: "user", content: prompt }
       ];

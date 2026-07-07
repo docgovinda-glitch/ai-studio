@@ -32,6 +32,8 @@ export default function ManuscriptDraftingWorkspace({
   onNext,
   onBack,
 }: ManuscriptDraftingWorkspaceProps) {
+  const confidenceSourceMode = project.confidenceSourceMode || "both";
+
   const sectionsList = project.complianceRules?.sectionStructure || [
     "Title Page",
     "Abstract & Keywords",
@@ -61,6 +63,7 @@ export default function ManuscriptDraftingWorkspace({
   const [showHistory, setShowHistory] = useState(false);
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const sectionProv = project.sectionProvenance?.[activeSec];
 
   const lockedSections = project.lockedSections || [];
   const isCurrentLocked = lockedSections.includes(activeSec);
@@ -127,14 +130,28 @@ export default function ManuscriptDraftingWorkspace({
         includeScriptures: includeScriptures,
         draftInstruction: customInstruction,
       });
+
       const updatedSections = { ...project.sections };
       if (existing) {
         setDiffPrev(existing);
         setShowDiff(true);
       }
       updatedSections[activeSec] = data.draftText || "";
+
+      const updatedProv = {
+        ...(project.sectionProvenance || {}),
+        [activeSec]: {
+          confidence: data.confidence,
+          sourcesUsed: data.sourcesUsed || [],
+          lastGeneratedAt: new Date().toISOString()
+        }
+      };
+
       saveVersion("AI co-agent draft generated");
-      updateProject({ sections: updatedSections });
+      updateProject({
+        sections: updatedSections,
+        sectionProvenance: updatedProv
+      });
     } catch (err: any) {
       console.error(err);
       setError(err.message || "An error occurred during section co-drafting. Check your API settings.");
@@ -142,6 +159,7 @@ export default function ManuscriptDraftingWorkspace({
       setLoading(false);
     }
   };
+
 
   const currentText = project.sections[activeSec] || "";
 
@@ -297,7 +315,7 @@ export default function ManuscriptDraftingWorkspace({
                         <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full" title="Drafted" />
                       )}
                       {isLocked && (
-                        <Lock className="w-3 h-3 text-amber-500" title="Locked" />
+                        <Lock className="w-3 h-3 text-amber-500" />
                       )}
                     </div>
                   </button>
@@ -384,7 +402,7 @@ export default function ManuscriptDraftingWorkspace({
               title={isCurrentLocked ? "Section is locked. Unlock to draft." : ""}
               className="w-full py-3 bg-[#1A365D] hover:bg-[#122847] disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed font-bold text-white text-xs rounded-xl transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer font-mono uppercase tracking-wider shadow-sm"
             >
-              {loading ? (
+                {loading ? (
                 <><RefreshCcw className="w-4 h-4 animate-spin" />Co-Writing Draft...</>
               ) : isCurrentLocked ? (
                 <><Lock className="w-4 h-4 text-gray-400" />Section Locked</>
@@ -415,6 +433,23 @@ export default function ManuscriptDraftingWorkspace({
             </div>
             <div className="flex items-center gap-2">
               <span className="text-[10px] text-gray-400 font-mono">{wordCount.toLocaleString()} words</span>
+
+              {/* Confidence / Source accountability toggle */}
+              <label className="hidden sm:flex items-center gap-2 text-[10px] font-mono text-gray-500">
+                <span className="uppercase tracking-wider">Accountability</span>
+                <select
+                  value={confidenceSourceMode}
+                  onChange={(e) => updateProject({ confidenceSourceMode: e.target.value as any })}
+                  className="bg-transparent border-none text-[#C08A3E] font-bold focus:outline-none cursor-pointer font-mono text-[10px]"
+                  aria-label="Confidence/Source display mode"
+                >
+                  <option value="both">Confidence + Source</option>
+                  <option value="confidence">Confidence only</option>
+                  <option value="source">Source only</option>
+                </select>
+              </label>
+
+
 
               {/* Version History */}
               <button
@@ -449,7 +484,6 @@ export default function ManuscriptDraftingWorkspace({
               <button
                 onClick={() => saveVersion("Manual save checkpoint")}
                 className="p-1.5 hover:bg-[#E2E8F0] rounded-lg transition-all cursor-pointer text-gray-500 hover:text-[#1A365D]"
-                title="Save version checkpoint"
               >
                 <Save className="w-3.5 h-3.5" />
               </button>
@@ -546,8 +580,33 @@ export default function ManuscriptDraftingWorkspace({
             )}
           </div>
 
+          {/* Provenance Panel (conditional) */}
+          {(confidenceSourceMode === "confidence" || confidenceSourceMode === "both") && sectionProv?.confidence !== undefined && (
+            <div className="border-b border-[#E2E8F0] bg-[#FAF9F6] px-4 py-3">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-[#C08A3E] font-bold flex items-center gap-2">
+                <span>Confidence</span>
+                <span className="px-2 py-0.5 bg-[#C08A3E]/10 border border-[#C08A3E]/20 rounded">{sectionProv.confidence}%</span>
+              </div>
+              {sectionProv.confidenceRationale && (
+                <p className="mt-1 text-[10px] text-gray-600 font-sans">{sectionProv.confidenceRationale}</p>
+              )}
+            </div>
+          )}
+
+          {(confidenceSourceMode === "source" || confidenceSourceMode === "both") && (sectionProv?.sourcesUsed?.length || 0) > 0 && (
+            <div className="border-b border-[#E2E8F0] bg-[#FFFFFF] px-4 py-3">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-[#1A365D] font-bold">Source / Citation Provenance</div>
+              <ul className="mt-2 space-y-1 max-h-[140px] overflow-y-auto pr-1">
+                {sectionProv!.sourcesUsed!.map((s, i) => (
+                  <li key={i} className="text-[10px] text-gray-700 font-mono leading-relaxed">• {s}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* Footer Status */}
           <div className="border-t border-[#E2E8F0] bg-[#FAF9F6] p-2.5 flex items-center justify-between text-[10px] text-gray-400 font-mono">
+
             <span>Auto-saved · {wordCount} words</span>
             <div className="flex items-center gap-3">
               {isCurrentLocked && (

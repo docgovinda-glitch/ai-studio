@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { Sidebar } from "@/components/layout/sidebar";
 import { TopNav } from "@/components/layout/top-nav";
 
@@ -10,6 +10,7 @@ type AppShellProps = {
 
 export function AppShell({ children }: AppShellProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {
@@ -18,12 +19,15 @@ export function AppShell({ children }: AppShellProps) {
       if (isAuth !== "true") {
         router.replace("/login");
       } else {
-        setTimeout(() => {
+        const isVerified = localStorage.getItem("ai_setting_verified") === "true";
+        if (!isVerified && pathname !== "/settings" && pathname !== "/login") {
+          router.replace("/settings");
+        } else {
           setAuthorized(true);
-        }, 0);
+        }
       }
     }
-  }, [router]);
+  }, [router, pathname]);
 
   if (!authorized) {
     return (

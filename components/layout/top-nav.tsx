@@ -61,7 +61,7 @@ export function TopNav() {
   const hasPhoto = user?.photo && user.photo !== "/api/placeholder/120/120" && user.photo !== "";
 
   return (
-    <header className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur">
+    <header className="sticky top-0 z-10 border-b border-border bg-background/70 backdrop-blur">
       <div className="flex h-16 items-center gap-4 px-4 sm:px-6">
         {/* Mobile Header Logo & Secret Click Target */}
         <div 
@@ -81,7 +81,7 @@ export function TopNav() {
 
         {/* Desktop Search */}
         <div className="hidden min-w-0 flex-1 items-center lg:flex">
-          <div className="flex h-9 w-full max-w-md items-center gap-2 rounded-lg border border-input bg-muted/40 px-3 text-sm text-muted-foreground">
+          <div className="flex h-9 w-full max-w-md items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-muted-foreground glass-focus">
             <Search className="size-4" aria-hidden="true" />
             <span className="truncate">Search projects, studios, and agents</span>
             <kbd className="ml-auto hidden items-center rounded border border-border bg-background px-1.5 py-0.5 text-[0.65rem] font-medium text-muted-foreground xl:inline-flex">
@@ -100,7 +100,7 @@ export function TopNav() {
           <div className="relative">
             <button
               onClick={() => setShowDropdown(!showDropdown)}
-              className="flex size-8 items-center justify-center rounded-lg bg-secondary text-xs font-semibold text-secondary-foreground border border-border/50 hover:bg-secondary/80 overflow-hidden cursor-pointer"
+              className="flex size-8 items-center justify-center rounded-lg bg-white/5 text-xs font-semibold text-foreground border border-white/10 hover:bg-white/10 overflow-hidden cursor-pointer glass-focus"
             >
               {hasPhoto ? (
                 <img src={user!.photo} alt="Avatar" className="size-full object-cover" />
@@ -113,10 +113,10 @@ export function TopNav() {
               <>
                 {/* Backdrop dismiss */}
                 <div className="fixed inset-0 z-10" onClick={() => setShowDropdown(false)} />
-                
+
                 {/* Dropdown Menu */}
-                <div className="absolute right-0 mt-2 w-56 rounded-lg border border-border bg-card p-1 shadow-lg z-20 animate-in fade-in slide-in-from-top-1 duration-150">
-                  <div className="px-3 py-2 border-b border-border/40 text-left">
+                <div className="absolute right-0 mt-2 w-56 rounded-xl border border-white/10 bg-white/5 backdrop-blur-2xl p-1 shadow-lg z-20 animate-in fade-in slide-in-from-top-1 duration-150">
+                  <div className="px-3 py-2 border-b border-white/10 text-left">
                     <p className="text-xs font-semibold text-foreground truncate">{displayName}</p>
                     <p className="text-[10px] text-muted-foreground truncate mt-0.5">{user?.email || "guest@everest.ai"}</p>
                   </div>
@@ -124,7 +124,7 @@ export function TopNav() {
                   <div className="py-1">
                     <button
                       onClick={() => { setShowDropdown(false); router.push("/settings"); }}
-                      className="flex w-full items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-accent/40 rounded-md transition-all text-left"
+                      className="flex w-full items-center gap-2 px-3 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-white/10 rounded-md transition-all text-left"
                     >
                       <Settings className="size-3.5" />
                       Profile Settings
@@ -133,7 +133,7 @@ export function TopNav() {
                     {user?.role === "admin" && (
                       <button
                         onClick={() => { setShowDropdown(false); router.push("/admin"); }}
-                        className="flex w-full items-center gap-2 px-3 py-2 text-xs text-primary hover:bg-primary/5 rounded-md transition-all text-left font-semibold"
+                        className="flex w-full items-center gap-2 px-3 py-2 text-xs text-primary hover:bg-primary/10 rounded-md transition-all text-left font-semibold"
                       >
                         <ShieldCheck className="size-3.5" />
                         Admin Console
@@ -141,7 +141,7 @@ export function TopNav() {
                     )}
                   </div>
                   
-                  <div className="border-t border-border/40 py-1">
+                  <div className="border-t border-white/10 py-1">
                     <button
                       onClick={handleLogout}
                       className="flex w-full items-center gap-2 px-3 py-2 text-xs text-red-400 hover:bg-red-500/10 rounded-md transition-all text-left"

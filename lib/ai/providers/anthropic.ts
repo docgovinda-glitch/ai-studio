@@ -157,5 +157,132 @@ export function createAnthropicProvider(): AiProvider {
         clearTimeout(timeout);
       }
     },
+
+    async generateTextStream(
+      request: AiGenerateTextRequest
+    ): Promise<ReadableStream> {
+      const apiKey = request.apiKey ?? process.env.ANTHROPIC_API_KEY;
+
+      if (!apiKey || !apiKey.trim()) {
+        throw new AiProviderUnavailableError(
+          "Anthropic API key is missing. Set it in Settings to enable this cloud provider."
+        );
+      }
+
+      const model = request.model ?? defaultModel;
+
+      if (request.messages.length === 0) {
+        throw new AiValidationError("At least one chat message is required.");
+      }
+
+      // Extract system prompts and sanitize messages for Anthropic
+      let systemPrompt = "";
+      const chatMessages: { role: "user" | "assistant"; content: string }[] = [];
+
+      for (const m of request.messages) {
+        if (m.role === "system") {
+          systemPrompt = (systemPrompt ? systemPrompt + "\n" : "") + m.content;
+        } else {
+          chatMessages.push({
+            role: m.role === "user" ? "user" : "assistant",
+            content: m.content,
+          });
+        }
+      }
+
+      if (chatMessages.length === 0) {
+        chatMessages.push({ role: "user", content: "Hello" });
+      }
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+      if (request.signal) {
+        request.signal.addEventListener("abort", () => controller.abort(), {
+          once: true,
+        });
+      }
+
+      const bodyPayload: Record<string, unknown> = {
+        model,
+        max_tokens: 4096,
+        messages: chatMessages,
+        stream: true,
+      };
+
+      if (systemPrompt) {
+        bodyPayload.system = systemPrompt;
+      }
+
+      const response = await fetch(BASE_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify(bodyPayload),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        const body = await response.text();
+        let parsedError = body;
+        try {
+          const json = JSON.parse(body);
+          parsedError = json.error?.message ?? body;
+        } catch {}
+
+        throw new AiProviderRequestError(
+          `Anthropic Request failed: ${parsedError}`,
+          response.status
+        );
+      }
+
+      if (!response.body) {
+        throw new AiProviderRequestError(
+          "Anthropic API did not return a response body.",
+          500
+        );
+      }
+
+      // Create a transform stream to convert Anthropic streaming format
+      const transformStream = new TransformStream({
+        transform(chunk, controller) {
+          try {
+            const text = new TextDecoder().decode(chunk);
+            const lines = text.split("\n").filter((line) => line.trim());
+
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                const data = line.slice(6);
+                if (data === "[DONE]") {
+                  controller.terminate();
+                  return;
+                }
+                try {
+                  const parsed = JSON.parse(data);
+                  // Anthropic streaming format: { type: "content_block_delta", delta: { text: "..." } }
+                  if (parsed.type === "content_block_delta") {
+                    const content = parsed.delta?.text;
+                    if (content) {
+                      controller.enqueue(new TextEncoder().encode(content));
+                    }
+                  }
+                } catch {
+                  controller.enqueue(chunk);
+                }
+              }
+            }
+          } catch (error) {
+            controller.error(error);
+          }
+        }
+      });
+
+      return response.body.pipeThrough(transformStream);
+    },
   };
 }

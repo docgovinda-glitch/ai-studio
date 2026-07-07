@@ -3,6 +3,8 @@ import "server-only";
 import {
   AiGenerateTextRequest,
   AiGenerateTextResponse,
+  AiGenerateImageRequest,
+  AiGenerateImageResponse,
   AiProvider,
 } from "@/lib/ai/types";
 import {
@@ -17,8 +19,15 @@ export const OPENAI_MODELS = [
   "gpt-3.5-turbo",
 ];
 
+export const OPENAI_IMAGE_MODELS = [
+  "dall-e-3",
+  "dall-e-2",
+];
+
 const DEFAULT_MODEL = "gpt-4o-mini";
+const DEFAULT_IMAGE_MODEL = "dall-e-3";
 const BASE_URL = "https://api.openai.com/v1/chat/completions";
+const IMAGE_URL = "https://api.openai.com/v1/images/generations";
 const TIMEOUT_MS = 30_000;
 
 export function createOpenAIProvider(): AiProvider {
@@ -27,7 +36,7 @@ export function createOpenAIProvider(): AiProvider {
   return {
     id: "openai",
     name: "OpenAI (Cloud)",
-    capabilities: ["chat"],
+    capabilities: ["chat", "image"],
     defaultModel,
     async generateText(
       request: AiGenerateTextRequest
@@ -116,6 +125,205 @@ export function createOpenAIProvider(): AiProvider {
           if (error.name === "AbortError") {
             throw new AiProviderUnavailableError(
               "OpenAI request timed out before returning a response."
+            );
+          }
+          if ("code" in error && error.code === "ECONNREFUSED") {
+            throw new AiProviderUnavailableError(
+              "Failed to establish connection to OpenAI endpoints."
+            );
+          }
+        }
+        throw error;
+      } finally {
+        clearTimeout(timeout);
+      }
+    },
+
+    async generateTextStream(
+      request: AiGenerateTextRequest
+    ): Promise<ReadableStream> {
+      const apiKey = request.apiKey ?? process.env.OPENAI_API_KEY;
+
+      if (!apiKey || !apiKey.trim()) {
+        throw new AiProviderUnavailableError(
+          "OpenAI API key is missing. Set it in Settings to enable this cloud provider."
+        );
+      }
+
+      const model = request.model ?? defaultModel;
+
+      if (request.messages.length === 0) {
+        throw new AiValidationError("At least one chat message is required.");
+      }
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+      if (request.signal) {
+        request.signal.addEventListener("abort", () => controller.abort(), {
+          once: true,
+        });
+      }
+
+      const response = await fetch(BASE_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: request.messages.map((m) => ({
+            role: m.role,
+            content: m.content,
+          })),
+          stream: true,
+          temperature: request.temperature ?? 0.7,
+          max_tokens: request.maxTokens,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        const body = await response.text();
+        let parsedError = body;
+        try {
+          const json = JSON.parse(body);
+          parsedError = json.error?.message ?? body;
+        } catch {}
+
+        throw new AiProviderRequestError(
+          `OpenAI Request failed: ${parsedError}`,
+          response.status
+        );
+      }
+
+      if (!response.body) {
+        throw new AiProviderRequestError(
+          "OpenAI API did not return a response body.",
+          500
+        );
+      }
+
+      // Create a transform stream to convert OpenAI streaming format
+      const transformStream = new TransformStream({
+        transform(chunk, controller) {
+          try {
+            const text = new TextDecoder().decode(chunk);
+            const lines = text.split("\n").filter((line) => line.trim());
+
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                const data = line.slice(6);
+                if (data === "[DONE]") {
+                  controller.terminate();
+                  return;
+                }
+                try {
+                  const parsed = JSON.parse(data);
+                  const content = parsed.choices?.[0]?.delta?.content;
+                  if (content) {
+                    controller.enqueue(new TextEncoder().encode(content));
+                  }
+                } catch {
+                  // If not JSON, pass through
+                  controller.enqueue(chunk);
+                }
+              }
+            }
+          } catch (error) {
+            controller.error(error);
+          }
+        }
+      });
+
+      return response.body.pipeThrough(transformStream);
+    },
+
+    async generateImage(
+      request: AiGenerateImageRequest
+    ): Promise<AiGenerateImageResponse> {
+      const apiKey = request.apiKey ?? process.env.OPENAI_API_KEY;
+
+      if (!apiKey || !apiKey.trim()) {
+        throw new AiProviderUnavailableError(
+          "OpenAI API key is missing. Set it in Settings to enable this cloud provider."
+        );
+      }
+
+      const model = request.model ?? DEFAULT_IMAGE_MODEL;
+
+      if (!request.prompt || !request.prompt.trim()) {
+        throw new AiValidationError("A prompt is required for image generation.");
+      }
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+      if (request.signal) {
+        request.signal.addEventListener("abort", () => controller.abort(), {
+          once: true,
+        });
+      }
+
+      try {
+        const response = await fetch(IMAGE_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model,
+            prompt: request.prompt,
+            size: request.size || "1024x1024",
+            quality: request.quality || "standard",
+            n: 1,
+          }),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          const body = await response.text();
+          let parsedError = body;
+          try {
+            const json = JSON.parse(body);
+            parsedError = json.error?.message ?? body;
+          } catch {}
+
+          throw new AiProviderRequestError(
+            `OpenAI Image generation failed: ${parsedError}`,
+            response.status
+          );
+        }
+
+        const payload = await response.json();
+        const imageUrl = payload.data?.[0]?.url;
+
+        if (!imageUrl) {
+          throw new AiProviderRequestError(
+            "OpenAI API returned an invalid image response structure.",
+            500
+          );
+        }
+
+        return {
+          providerId: "openai",
+          model,
+          imageUrl,
+          metadata: {
+            revisedPrompt: payload.data?.[0]?.revised_prompt,
+          },
+        };
+      } catch (error) {
+        if (error instanceof Error) {
+          if (error.name === "AbortError") {
+            throw new AiProviderUnavailableError(
+              "OpenAI image request timed out before returning a response."
             );
           }
           if ("code" in error && error.code === "ECONNREFUSED") {

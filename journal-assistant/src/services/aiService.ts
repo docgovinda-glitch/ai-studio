@@ -377,7 +377,8 @@ export async function draftSection(params: {
   userStyleSample: string;
   includeScriptures: boolean;
   draftInstruction: string;
-}): Promise<{ draftText: string }> {
+}): Promise<{ draftText: string; confidence?: number; sourcesUsed?: string[] }> {
+
   const { projectState, sectionName, sectionOutline, userStyleSample, includeScriptures, draftInstruction } = params;
 
   const groundingInfo = projectState.groundingMap ? `
@@ -425,23 +426,47 @@ ${sectionOutline || "Standard flow for " + sectionName}
 Custom Guidance for this turn:
 ${draftInstruction || "Write/complete the subsection with scholarly density and appropriate citations."}
 
-Drafting Rules: 
+Accountability Output Contract (IMPORTANT):
+Return STRICTLY valid JSON only (no markdown fences, no extra text) in this exact format:
+{
+  "draftText": "...full ready-to-publish academic prose...",
+  "confidence": 0-100,
+  "confidenceRationale": "Short explanation of why the draftText has this confidence score (evidence coverage, citation completeness, alignment to thesis/outline).",
+  "sourcesUsed": ["...citation provenance strings..."]
+}
+
+Drafting Rules:
 1. Treat Dr. Govinda Kumar Shah's doctoral dissertation (and his previous research in international relations and diplomacy at Tribhuvan University) as the foundational conceptual framework, and cite it substantially (e.g., Shah, PhD Thesis; Shah, 2018) in the body.
-2. Begin by clearly identifying where corresponding dissertation material is being leveraged or extended (e.g., "[Dissertation Reference Note: This section maps directly to and builds upon Chapter 3, Section 3.2 of the doctoral thesis to maintain theoretical rigor.]") before writing the main academic text.
+2. Begin by clearly identifying where corresponding dissertation material is being leveraged or extended (e.g., "[Dissertation Reference Note: This section maps directly to and builds upon Chapter 3, Section 3.2 of the doctoral thesis to maintain theoretical rigor."]") before writing the main academic text.
 3. Integrate authentic Sanskrit/Vedic/Upanishadic scriptural verses with precise and real historical citation tags (e.g., Rigveda 10.191.2).
 
 Write the draft section in full, ready-to-publish academic prose. Do not leave placeholder text or summarized notes.`;
+
 
   const responseText = await generateWithSettings({
     systemInstruction,
     prompt,
     temperature: 0.4,
+    responseMimeType: "application/json",
     aiSettings: projectState.aiSettings,
     taskType: "drafting"
   });
 
-  return { draftText: responseText };
+  const parsed = safeParseJSON<{
+    draftText: string;
+    confidence?: number;
+    confidenceRationale?: string;
+    sourcesUsed?: string[];
+  }>(responseText);
+
+  return {
+    draftText: parsed.draftText || "",
+    confidence: typeof parsed.confidence === "number" ? parsed.confidence : undefined,
+    sourcesUsed: parsed.sourcesUsed || []
+  };
+
 }
+
 
 // Phase F: Manuscript Section Co-Drafting Streaming Agent
 export async function draftSectionStream(params: {
@@ -452,7 +477,8 @@ export async function draftSectionStream(params: {
   includeScriptures: boolean;
   draftInstruction: string;
   onToken: (token: string) => void;
-}): Promise<AIResponse> {
+}): Promise<AIResponse & { confidence?: number; sourcesUsed?: string[] }> {
+
   const { projectState, sectionName, sectionOutline, userStyleSample, includeScriptures, draftInstruction, onToken } = params;
 
   const groundingInfo = projectState.groundingMap ? `
@@ -513,15 +539,17 @@ All generated or refined sections MUST include supporting Sanskrit verses (in Ro
 Every scripture support MUST use authentic sources and specify genuine verses and citations (e.g., Isavasya Upanishad, Verse 1).
 ` : "Do not inject any verses or scriptures into this output.";
 
-  const systemInstruction = `You are an elite, human-sounding Academic Writing Agent. 
+  const systemInstruction = `You are an elite, human-sounding Academic Writing Agent.
 Your tone is sophisticated, precise, deeply analytical, and fluid. You write without robotic filler phrases.
 Ensure you maintain extreme conceptual continuity with the underlying doctoral dissertation of Dr. Govinda Kumar Shah (PhD in International Relations and Diplomacy, Tribhuvan University, Nepal) and cite his thesis (e.g. "Shah, 2018" or "Shah, PhD thesis") substantially in all drafts.`;
+
 
   const prompt = `Draft or refine the "${sectionName}" section of our manuscript.
 
 Title: ${projectState.title}
 Objectives: ${projectState.objectives}
 Research Questions: ${projectState.researchQuestions}
+Research Gap: ${projectState.researchGap}
 Methodology: ${projectState.methodology}
 Target Journal: ${projectState.targetJournal?.name || "Academic Journal"}
 
@@ -531,6 +559,15 @@ ${styleProfileContext}
 ${continuityContext}
 ${scriptureInstruction}
 
+Accountability Output Contract (IMPORTANT):
+Return STRICTLY valid JSON only in this exact format:
+{
+  "draftText": "...full ready-to-publish academic prose...",
+  "confidence": 0-100,
+  "confidenceRationale": "Short explanation...",
+  "sourcesUsed": ["...citation provenance strings..."]
+}
+
 Outline/Subsections:
 ${sectionOutline || "Standard flow for " + sectionName}
 
@@ -539,17 +576,36 @@ ${draftInstruction || "Write/complete the subsection with scholarly density."}
 
 Write the draft section in full academic prose.`;
 
-  const response = await AIGateway.generateStream({
-    systemInstruction,
-    prompt,
-    temperature: 0.4,
-    taskType: "drafting"
-  }, projectState.aiSettings || { provider: "auto" }, onToken);
+  const response = await AIGateway.generateStream(
+    {
+      systemInstruction,
+      prompt,
+      temperature: 0.4,
+      taskType: "drafting",
+      responseMimeType: "application/json"
+    } as any,
+    projectState.aiSettings || { provider: "auto" },
+    onToken
+  );
 
   logAIUsage(response.provider, response.model || "unknown", response.inputWords, response.outputWords, "drafting");
 
-  return response;
+  // Since we asked for strict JSON, parse and extract provenance.
+  const parsed = safeParseJSON<{
+    draftText: string;
+    confidence?: number;
+    confidenceRationale?: string;
+    sourcesUsed?: string[];
+  }>(response.text || "{}");
+
+  return {
+    ...response,
+    text: parsed.draftText || response.text,
+    confidence: typeof parsed.confidence === "number" ? parsed.confidence : undefined,
+    sourcesUsed: parsed.sourcesUsed || []
+  };
 }
+
 
 // Phase G: Quality Control (QC) Agent
 export async function runQualityControl(params: {

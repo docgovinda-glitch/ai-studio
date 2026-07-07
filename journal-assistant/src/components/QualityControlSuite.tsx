@@ -16,6 +16,9 @@ export default function QualityControlSuite({
   onNext,
   onBack,
 }: QualityControlSuiteProps) {
+  const confidenceSourceMode = project.confidenceSourceMode || "both";
+  const hasProvenance = !!project.sectionProvenance && Object.keys(project.sectionProvenance).length > 0;
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -276,6 +279,52 @@ export default function QualityControlSuite({
 
             </div>
 
+            {/* Provenance Summary (conditional) */}
+            {hasProvenance && (confidenceSourceMode === "source" || confidenceSourceMode === "both") && (
+              <div className="glass-effect rounded-xl p-5 border-white/5 space-y-3">
+                <h3 className="text-sm font-semibold text-brand-300 font-mono uppercase tracking-wider border-b border-white/5 pb-2">
+                  Accountability: Sources / Citation Provenance (Draft)
+                </h3>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {Object.entries(project.sectionProvenance || {}).map(([sec, prov]) => (
+                    <div key={sec} className="bg-white/[0.02] border border-white/5 rounded-lg p-3 space-y-2">
+                      <div className="text-[10px] font-mono font-bold text-white uppercase tracking-wider">
+                        {sec}
+                      </div>
+                      {(prov.sourcesUsed || []).slice(0, 6).length > 0 ? (
+                        <ul className="space-y-1">
+                          {(prov.sourcesUsed || []).slice(0, 6).map((s, i) => (
+                            <li key={i} className="text-[10px] text-gray-300 font-mono leading-relaxed">• {s}</li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-[10px] text-gray-400 font-mono italic">No provenance recorded for this section.</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Confidence summary (optional, minimal) */}
+            {hasProvenance && (confidenceSourceMode === "confidence" || confidenceSourceMode === "both") && (
+              <div className="glass-effect rounded-xl p-5 border-white/5 space-y-3">
+                <h3 className="text-sm font-semibold text-brand-300 font-mono uppercase tracking-wider border-b border-white/5 pb-2">
+                  Accountability: Confidence Scores (Draft)
+                </h3>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {Object.entries(project.sectionProvenance || {}).map(([sec, prov]) => (
+                    <div key={sec} className="bg-white/[0.02] border border-white/5 rounded-lg p-3 space-y-1">
+                      <div className="text-[10px] font-mono font-bold text-white uppercase tracking-wider">{sec}</div>
+                      <div className="text-[11px] font-mono text-emerald-300 font-bold">
+                        {typeof prov.confidence === "number" ? `${prov.confidence}%` : "—"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="flex justify-between items-center pt-4 border-t border-white/10">
               <button
                 onClick={onBack}
@@ -283,6 +332,7 @@ export default function QualityControlSuite({
               >
                 Back to Laboratories
               </button>
+
               <div className="flex gap-4">
                 <button
                   onClick={runQualityAudits}

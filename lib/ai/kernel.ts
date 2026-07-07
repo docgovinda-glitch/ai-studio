@@ -2,8 +2,10 @@ import "server-only";
 
 import { AiProviderRequestError, AiValidationError } from "@/lib/ai/errors";
 import {
+  AiGenerateTextRequest,
   AiGenerateTextResponse,
-  AiKernelGenerateTextRequest,
+  AiGenerateImageRequest,
+  AiGenerateImageResponse,
   AiProvider,
   AiProviderMetadata,
 } from "@/lib/ai/types";
@@ -13,6 +15,7 @@ import { createGeminiProvider } from "@/lib/ai/providers/gemini";
 import { createGroqProvider } from "@/lib/ai/providers/groq";
 import { createOpenAIProvider } from "@/lib/ai/providers/openai";
 import { createAnthropicProvider } from "@/lib/ai/providers/anthropic";
+import { createMockProvider } from "@/lib/ai/providers/mock";
 
 export class AiKernel {
   private readonly providers: Map<string, AiProvider>;
@@ -45,9 +48,9 @@ export class AiKernel {
   }
 
   async generateText(
-    request: AiKernelGenerateTextRequest
+    request: AiGenerateTextRequest & { providerId?: string; apiKeys?: Record<string, string> }
   ): Promise<AiGenerateTextResponse> {
-    const providerId = request.providerId ?? this.defaultProviderId;
+    const providerId = request.providerId || this.defaultProviderId;
     const provider = this.providers.get(providerId);
 
     if (!provider) {
@@ -65,7 +68,7 @@ export class AiKernel {
     }
 
     const apiKey = request.apiKeys?.[providerId] || getEnvKey(providerId);
-    const isKeyless = providerId === "ollama";
+    const isKeyless = providerId === "ollama" || providerId === "mock";
 
     if (!isKeyless && (!apiKey || !apiKey.trim())) {
       throw new AiProviderRequestError(
@@ -75,6 +78,92 @@ export class AiKernel {
     }
 
     return provider.generateText({
+      ...request,
+      apiKey,
+    });
+  }
+
+  async generateTextStream(
+    request: AiGenerateTextRequest & { providerId?: string; apiKeys?: Record<string, string> }
+  ): Promise<ReadableStream> {
+    const providerId = request.providerId || this.defaultProviderId;
+    const provider = this.providers.get(providerId);
+
+    if (!provider) {
+      throw new AiProviderRequestError(
+        `AI provider "${providerId}" is not registered.`,
+        400
+      );
+    }
+
+    if (!provider.capabilities.includes("chat")) {
+      throw new AiProviderRequestError(
+        `AI provider "${providerId}" does not support chat.`,
+        400
+      );
+    }
+
+    if (!provider.generateTextStream) {
+      throw new AiProviderRequestError(
+        `AI provider "${providerId}" does not support streaming.`,
+        400
+      );
+    }
+
+    const apiKey = request.apiKeys?.[providerId] || getEnvKey(providerId);
+    const isKeyless = providerId === "ollama" || providerId === "mock";
+
+    if (!isKeyless && (!apiKey || !apiKey.trim())) {
+      throw new AiProviderRequestError(
+        `API key for "${providerId}" is missing. Please configure it in Settings.`,
+        400
+      );
+    }
+
+    return provider.generateTextStream!({
+      ...request,
+      apiKey,
+    });
+  }
+
+  async generateImage(
+    request: AiGenerateImageRequest & { providerId?: string; apiKeys?: Record<string, string> }
+  ): Promise<AiGenerateImageResponse> {
+    const providerId = request.providerId || this.defaultProviderId;
+    const provider = this.providers.get(providerId);
+
+    if (!provider) {
+      throw new AiProviderRequestError(
+        `AI provider "${providerId}" is not registered.`,
+        400
+      );
+    }
+
+    if (!provider.capabilities.includes("image")) {
+      throw new AiProviderRequestError(
+        `AI provider "${providerId}" does not support image generation.`,
+        400
+      );
+    }
+
+    if (!provider.generateImage) {
+      throw new AiProviderRequestError(
+        `AI provider "${providerId}" does not support image generation.`,
+        400
+      );
+    }
+
+    const apiKey = request.apiKeys?.[providerId] || getEnvKey(providerId);
+    const isKeyless = providerId === "ollama" || providerId === "mock";
+
+    if (!isKeyless && (!apiKey || !apiKey.trim())) {
+      throw new AiProviderRequestError(
+        `API key for "${providerId}" is missing. Please configure it in Settings.`,
+        400
+      );
+    }
+
+    return provider.generateImage({
       ...request,
       apiKey,
     });
@@ -100,11 +189,12 @@ function getEnvKey(providerId: string): string | undefined {
 
 export function createAiKernel() {
   return new AiKernel([
+    createMockProvider(),
     createOllamaProvider(),
     createOpenRouterProvider(),
     createGeminiProvider(),
     createGroqProvider(),
     createOpenAIProvider(),
     createAnthropicProvider()
-  ], "ollama");
+  ], "mock");
 }
